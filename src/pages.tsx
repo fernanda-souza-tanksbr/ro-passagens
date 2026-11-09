@@ -2147,8 +2147,8 @@ function Operacoes({ row, onDone }: { row: Solicitacao; onDone: () => void }) {
     setBusy(false);
     if (!error) onDone();
   }
-  async function finalizar(event: React.FormEvent) {
-    event.preventDefault();
+  async function finalizar() {
+    if (busy || !window.confirm("Confirmar a finalização das atividades do RO? Esta ação encerrará a etapa operacional da solicitação.")) return;
     setBusy(true); setErro("");
     const { error } = await supabase.rpc("ro_finalizar_solicitacao", {
       p_solicitacao_id: row.id,
@@ -2158,13 +2158,13 @@ function Operacoes({ row, onDone }: { row: Solicitacao; onDone: () => void }) {
     setBusy(false); if (!error) onDone();
   }
   if (["finalizada", "cancelada", "recusada"].includes(row.status)) return null;
-  if (row.status === "passagem_comprada") return <form className="card form operations" onSubmit={finalizar}>
+  if (row.status === "passagem_comprada") return <section className="card form operations">
     <h2 className="wide">Finalizar solicitação</h2>
     <p className="wide">Encerre as atividades do RO para esta solicitação. Isso não confirma a chegada do funcionário. Valores e passagens complementares continuarão editáveis.</p>
     {erro && <div className="error wide">{erro}</div>}
     <label className="wide">Observação operacional<textarea rows={3} maxLength={1000} value={observacao} onChange={(e)=>setObservacao(e.target.value)}/></label>
-    <div className="actions wide"><button className="btn primary" disabled={busy}>{busy?"Finalizando...":"Finalizar atividades do RO"}</button><button type="button" className="btn danger" disabled={busy} onClick={cancelar}>Cancelar solicitação</button></div>
-  </form>;
+    <div className="actions wide"><button type="button" className="btn primary" disabled={busy} onClick={finalizar}>{busy?"Finalizando...":"Finalizar atividades do RO"}</button><button type="button" className="btn danger" disabled={busy} onClick={cancelar}>Cancelar solicitação</button></div>
+  </section>;
   return (
     <section className="card operations">
       <h2>Ações operacionais</h2>
