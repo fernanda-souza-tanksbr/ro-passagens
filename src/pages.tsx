@@ -1313,7 +1313,7 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
       setErro("Informe a justificativa do afastamento.");
       return;
     }
-    if(motivoResidencial&&!destinoDiferente&&!destinoResidencial?.possui_endereco){setErro("Funcionário sem endereço residencial cadastrado pelo RH.");return}
+    
     if(motivoResidencial&&destinoDiferente&&justificativaDestino.trim().length<10){setErro("A justificativa do destino excepcional deve ter pelo menos 10 caracteres.");return}
     if (!form.data_ida || (!operadorRoPodeCadastrarRetroativa && form.data_ida < dataMinimaInput)) {
       setDataPrazoErro(true);
@@ -1341,7 +1341,7 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
       if(up.error){setErro("Não foi possível enviar o documento interno.");setBusy(false);return;}
       documentos.push({categoria,storage_path:uploadedPath,arquivo_nome:documento.name,tamanho_bytes:documento.size});
     }
-    const payload=normalizarCamposRetorno({...form,aprovador_id:dispensaAprovacao?"":form.aprovador_id,id,colaborador_id:viajanteManual?null:funcionarioSelecionado?.funcionario_id===funcionarioSelecionado?.id?null:funcionarioSelecionado?.id,funcionario_id:viajanteManual?null:funcionarioSelecionado?.funcionario_id||null,viajante_nome_informado:viajanteManual?form.viajante_nome_informado:null,solicitar_excecao_prazo:!operadorRoPodeCadastrarRetroativa&&podeExcepcionarPrazo&&permiteExcecaoPrazo&&solicitarExcecao,usar_destino_excepcional:motivoResidencial&&destinoDiferente,destino_residencial_justificativa:justificativaDestino});
+    const payload=normalizarCamposRetorno({...form,aprovador_id:dispensaAprovacao?"":form.aprovador_id,id,colaborador_id:viajanteManual?null:funcionarioSelecionado?.funcionario_id===funcionarioSelecionado?.id?null:funcionarioSelecionado?.id,funcionario_id:viajanteManual?null:funcionarioSelecionado?.funcionario_id||null,viajante_nome_informado:viajanteManual?form.viajante_nome_informado:null,solicitar_excecao_prazo:!operadorRoPodeCadastrarRetroativa&&podeExcepcionarPrazo&&permiteExcecaoPrazo&&solicitarExcecao,usar_destino_excepcional:motivoResidencial&&!!destinoResidencial?.possui_endereco?false:motivoResidencial&&destinoDiferente,destino_residencial_justificativa:motivoResidencial&&destinoDiferente?justificativaDestino:""});
     const { data: created, error } = await supabase.rpc("ro_criar_solicitacao_com_aprovador", { p_solicitacao:payload, p_documentos:documentos });
     if (error) {
       if(uploadedPath) await supabase.storage.from("ro-documentos-internos").remove([uploadedPath]);
@@ -1429,14 +1429,14 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
           <input
             required
             value={form.destino}
-            readOnly={motivoResidencial&&!destinoDiferente}
+            readOnly={motivoResidencial&&!destinoDiferente&&!!destinoResidencial?.possui_endereco}
             onChange={(e) => setForm({ ...form, destino: e.target.value })}
             placeholder="Cidade / UF"
           />
           {motivoResidencial&&destinoResidencial?.possui_endereco&&!destinoDiferente&&<small>Destino residencial cadastrado pelo RH.</small>}
-          {motivoResidencial&&destinoResidencial&&!destinoResidencial.possui_endereco&&!destinoDiferente&&<small className="error">Funcionário sem endereço residencial cadastrado pelo RH.</small>}
+          {motivoResidencial&&destinoResidencial&&!destinoResidencial.possui_endereco&&!destinoDiferente&&<small>Endereço não cadastrado pelo RH. Informe manualmente a cidade e UF de destino.</small>}
         </label>
-        {motivoResidencial&&<><label className="checkbox wide"><input type="checkbox" checked={destinoDiferente} onChange={e=>{setDestinoDiferente(e.target.checked);setForm(atual=>({...atual,destino:e.target.checked?"":destinoResidencial?.possui_endereco?`${destinoResidencial.cidade} / ${destinoResidencial.uf}`:""}))}}/> {destinoResidencial?.possui_endereco?"Utilizar destino diferente do cadastro":"Informar destino excepcional"}</label>{destinoDiferente&&<label className="wide">Justificativa do destino excepcional *<textarea required minLength={10} value={justificativaDestino} onChange={e=>setJustificativaDestino(e.target.value)}/></label>}</>}
+        {motivoResidencial&&destinoResidencial?.possui_endereco&&<><label className="checkbox wide"><input type="checkbox" checked={destinoDiferente} onChange={e=>{setDestinoDiferente(e.target.checked);setForm(atual=>({...atual,destino:e.target.checked?"":destinoResidencial?.possui_endereco?`${destinoResidencial.cidade} / ${destinoResidencial.uf}`:""}))}}/> {destinoResidencial?.possui_endereco?"Utilizar destino diferente do cadastro":"Informar destino excepcional"}</label>{destinoDiferente&&<label className="wide">Justificativa do destino excepcional *<textarea required minLength={10} value={justificativaDestino} onChange={e=>setJustificativaDestino(e.target.value)}/></label>}</>}
         <label>
           Motivo *
           <select
