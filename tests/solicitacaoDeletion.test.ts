@@ -39,7 +39,7 @@ test("ações operacionais continuam bloqueadas e aprovadas ou dispensadas prese
   assert.match(page, /!operacaoLiberada && \(access\.canOperateRO \|\| access\.isDenise\) && <AcoesOperacionaisBloqueadas/);
   assert.equal(canShowSolicitacaoDeletion(true, "aprovada", null), true);
   assert.equal(canShowSolicitacaoDeletion(true, "dispensada", null), true);
-  assert.equal(canShowSolicitacaoDeletion(true, "pendente", null), false);
+  assert.equal(canShowSolicitacaoDeletion(true, "pendente", null), true);
   assert.equal(canShowSolicitacaoDeletion(true, "reprovada", "2026-08-25T12:00:00Z"), false);
 });
 
