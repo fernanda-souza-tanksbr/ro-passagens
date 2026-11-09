@@ -6,8 +6,7 @@ export function canShowSolicitacaoDeletion(
   excluidaEm?: string | null,
 ) {
   return canOperateRO
-    && !excluidaEm
-    && approvalStatus !== "pendente";
+    && !excluidaEm;
 }
 
 export function normalizeDeletionReason(reason: string) {
