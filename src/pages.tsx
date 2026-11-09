@@ -1331,6 +1331,7 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
     const categoria = categoriaDocumento(form.desligamento_subtipo || null);
     if (categoria && !documento) { setErro("Anexe o documento interno obrigatório em PDF."); return; }
     if (calculo.anosPendentes.length) { setErro(`O calendário de dias não úteis de ${calculo.anosPendentes[0]} ainda não foi validado.`); return; }
+    if (!window.confirm("Confirmar a criação desta solicitação de passagem? Verifique os dados antes de continuar.")) return;
     setBusy(true);
     const id = crypto.randomUUID(); const documentos: Array<Record<string,string|number>> = []; let uploadedPath="";
     if (documento && categoria) {
@@ -1367,7 +1368,7 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
       title="Nova solicitação"
       subtitle="Informe os dados previstos para o deslocamento"
     >
-      <form className="card form" onSubmit={submit}>
+      <form className="card form" onSubmit={submit} onKeyDown={(event) => { if (event.key === "Enter" && !(event.target instanceof HTMLTextAreaElement)) event.preventDefault(); }}>
         {erro && <div className="error wide">{erro}</div>}
         <label>
           Solicitante
