@@ -1,0 +1,58 @@
+-- RASCUNHO 07 - CORRECAO DA ORDEM DE EXECUCAO. NAO EXECUTAR EM PRODUCAO.
+-- Substitui o desenho da etapa 05 (snapshot posterior ao INSERT).
+-- DEPENDE de revisao de toda a cadeia de criacao, autorizacao e triggers.
+--
+-- Ordem obrigatoria na MESMA chamada PostgreSQL:
+-- 1. validar identidade/permissao de criacao para funcionario/CC;
+-- 2. lock por funcionario e preparar episodio interno (04);
+-- 3. publicar contexto transacional protegido de distancia/episodio;
+-- 4. chamar ro_criar_solicitacao_com_aprovador EXISTENTE;
+-- 5. BEFORE INSERT valida contexto, calcula ciclo e grava snapshot em NEW;
+-- 6. AFTER INSERT audita snapshot ja gravado;
+-- 7. limpar contexto; qualquer excecao faz rollback da transacao.
+--
+-- IMPORTANTE: set_config/GUC NAO E UM LIMITE DE SEGURANCA.
+-- Usuarios podem definir variaveis de sessao. O trigger deve validar que
+-- episodio, funcionario, CC e km correspondem a dados persistidos e que
+-- a operacao foi autorizada; nunca confiar apenas em current_setting().
+--
+-- Exemplo do trecho de orquestracao (PSEUDOCODIGO PLPGSQL):
+--
+-- v_episodio := ro_private.preparar_episodio_folga(...);
+-- perform set_config('ro.folga_episodio_id',v_episodio->>'alocacao_id',true);
+-- v_id := public.ro_criar_solicitacao_com_aprovador(
+--   p_solicitacao - 'folga_alocacao_id' - 'folga_distancia_km'
+--                 - 'folga_regime_faixa' - 'folga_intervalo_dias',
+--   p_documentos
+-- );
+-- perform set_config('ro.folga_episodio_id','',true);
+-- return v_id;
+--
+-- O BEFORE INSERT deve:
+-- * localizar episodio interno por ID e funcionario_id/obra_id de NEW;
+-- * rejeitar ausencia/mismatch e verificar que foi preparado nesta transacao;
+-- * derivar km/faixa/intervalo do episodio (nao do cliente);
+-- * atribuir NEW.folga_alocacao_id, folga_distancia_km,
+--   folga_regime_faixa, folga_intervalo_dias;
+-- * calcular proxima data por ultima data_ida aprovada e finalizada;
+-- * manter bloqueios de duplicidade e justificativa;
+-- * preservar o snapshot em UPDATE de status.
+--
+-- O AFTER INSERT deve auditar os campos NEW (ja presentes).
+--
+-- NAO FAZER:
+-- * UPDATE de snapshot apos criacao como no rascunho 05;
+-- * liberar EXECUTE do wrapper 05 antes de substituir trigger;
+-- * criar triggers paralelos com ordem ambigua;
+-- * modificar tabelas oficiais de lotacao, Obras Control ou Vistorias.
+--
+-- QUESTAO DE SEGURANCA A RESOLVER:
+-- O episodio nao pode ser criado antes de validar permissao de solicitar
+-- por funcionario. A cadeia atual so valida isso durante a criacao.
+-- Uma falha posterior faz rollback, mas a autorizacao deve ser revisada
+-- para impedir caminhos indevidos de preparacao e consulta de distancia.
+--
+-- QUESTAO DE CONCORRENCIA:
+-- O lock usa hashtextextended(funcionario_id,904), igual ao trigger atual.
+-- Testar duas solicitacoes simultaneas do mesmo funcionario e a reversao
+-- quando a segunda falha por FOLGA_FUTURA_DUPLICADA.
