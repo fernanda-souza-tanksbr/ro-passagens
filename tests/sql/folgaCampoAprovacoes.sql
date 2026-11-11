@@ -178,7 +178,7 @@ begin
 end $$;
 -- Aprovacao pendente por coordenador diferente do solicitante:
 -- verificar que o UPDATE do aprovador nao modifica snapshot nem ciclo.
-DO $
+DO $$
 declare v_id uuid:='00000000-0000-0000-0000-000000000404';
   v_snapshot integer; v_previsao date; v_erro text;
 begin
@@ -217,6 +217,6 @@ begin
     raise exception 'PROTECAO_APROVACAO_INOPERANTE: %',v_erro;
   end if;
  end;
-end $;
+end $$;
 
 select 'FOLGA_APROVACOES_ISOLADAS_OK' as resultado;
