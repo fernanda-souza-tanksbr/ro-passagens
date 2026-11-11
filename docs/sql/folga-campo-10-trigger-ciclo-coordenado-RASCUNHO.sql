@@ -15,6 +15,24 @@ declare
   v_contexto ro_private.folga_criacao_contexto%rowtype;
   v_ultima_data date;
 begin
+  -- Atualizacoes de status sem mudanca dos parametros do ciclo preservam
+  -- os valores ja registrados, inclusive a aprovacao de antecipacao.
+  if tg_op='UPDATE'
+     and old.motivo='folga_campo' and new.motivo='folga_campo'
+     and new.funcionario_id is not distinct from old.funcionario_id
+     and new.obra_id is not distinct from old.obra_id
+     and new.data_ida is not distinct from old.data_ida
+     and new.folga_antecipacao_justificativa
+         is not distinct from old.folga_antecipacao_justificativa then
+    new.folga_data_prevista_ciclo:=old.folga_data_prevista_ciclo;
+    new.folga_ciclo_anterior_id:=old.folga_ciclo_anterior_id;
+    new.folga_antecipada:=old.folga_antecipada;
+    if new.status='recusada' and old.status is distinct from 'recusada'
+       and old.folga_antecipada then
+      new.folga_antecipacao_status:='recusada';
+    end if;
+    return new;
+  end if;
   if tg_op = 'UPDATE' then
     v_aprovada := old.folga_antecipacao_status = 'aprovada';
   end if;
