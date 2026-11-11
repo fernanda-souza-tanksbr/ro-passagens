@@ -1,0 +1,62 @@
+name: Folga de Campo - testes SQL isolados
+
+on:
+  push:
+    branches:
+      - feat/folga-campo-regimes-distancia
+    paths:
+      - 'docs/sql/folga-campo-*.sql'
+      - 'tests/sql/folgaCampo*.sql'
+      - '.github/workflows/testar-folga-sql.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: folga-sql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  postgres-descartavel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: teste_descartavel
+          POSTGRES_DB: folga_teste
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d folga_teste"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: teste_descartavel
+      PGDATABASE: folga_teste
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Criar fixture e aplicar rascunhos em banco descartavel
+        run: |
+          psql -X -v ON_ERROR_STOP=1 \
+            -f tests/sql/folgaCampoFixture.sql \
+            -f docs/sql/folga-campo-01-estruturas-RASCUNHO.sql \
+            -f docs/sql/folga-campo-08-contexto-privado-transacional-RASCUNHO.sql \
+            -f docs/sql/folga-campo-04-episodio-transacional-RASCUNHO.sql \
+            -f docs/sql/folga-campo-10-trigger-ciclo-coordenado-RASCUNHO.sql \
+            -f docs/sql/folga-campo-11-auditoria-guard-status-RASCUNHO.sql \
+            -f docs/sql/folga-campo-09-rpc-criacao-coordenada-RASCUNHO.sql \
+            -c "create trigger ro_validar_ciclo_folga_campo before insert or update of funcionario_id,motivo,data_ida,status,folga_antecipacao_justificativa on public.ro_passagem_solicitacoes for each row execute function public.ro_validar_ciclo_folga_campo()" \
+            -c "create trigger ro_auditar_ciclo_folga_campo after insert or update of status on public.ro_passagem_solicitacoes for each row execute function public.ro_auditar_ciclo_folga_campo()"
+
+      - name: Validar rollback e snapshots em transacoes reais
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoTransacoes.sql
