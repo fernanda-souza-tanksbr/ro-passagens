@@ -52,11 +52,13 @@ jobs:
             -f docs/sql/folga-campo-01-estruturas-RASCUNHO.sql \
             -f docs/sql/folga-campo-08-contexto-privado-transacional-RASCUNHO.sql \
             -f docs/sql/folga-campo-04-episodio-transacional-RASCUNHO.sql \
+            -f docs/sql/folga-campo-03-correcao-RASCUNHO.sql \
             -f docs/sql/folga-campo-10-trigger-ciclo-coordenado-RASCUNHO.sql \
             -f docs/sql/folga-campo-11-auditoria-guard-status-RASCUNHO.sql \
             -f docs/sql/folga-campo-09-rpc-criacao-coordenada-RASCUNHO.sql \
+            -f docs/sql/folga-campo-12-consulta-contexto-RASCUNHO.sql \
             -c "create trigger ro_validar_ciclo_folga_campo before insert or update of funcionario_id,motivo,data_ida,status,folga_antecipacao_justificativa on public.ro_passagem_solicitacoes for each row execute function public.ro_validar_ciclo_folga_campo()" \
             -c "create trigger ro_auditar_ciclo_folga_campo after insert or update of status on public.ro_passagem_solicitacoes for each row execute function public.ro_auditar_ciclo_folga_campo()"
 
       - name: Validar rollback e snapshots em transacoes reais
-        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoTransacoes.sql
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoTransacoes.sql -f tests/sql/folgaCampoPermissoes.sql
