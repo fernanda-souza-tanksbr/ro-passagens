@@ -1,0 +1,43 @@
+name: Validacao RO Passagens (sem deploy)
+
+on:
+  push:
+    branches:
+      - feat/folga-campo-regimes-distancia
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ro-passagens-validacao-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validar:
+    name: Testes, TypeScript e build Vite
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout da branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Instalar dependencias do lockfile
+        run: npm ci
+
+      - name: Testes de regressao
+        run: npm test
+
+      - name: Validar TypeScript
+        run: npm run typecheck
+
+      - name: Compilar Vite
+        run: npm run build
