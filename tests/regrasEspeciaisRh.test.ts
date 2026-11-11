@@ -147,5 +147,5 @@ test("consumidores mostram nome manual e dados de emissão nulos",()=>{
   assert.match(migration,/return query select v_nome_manual,null::date,null::text,null::text,null::text/);
   assert.match(pages,/Nome informado, dados cadastrais ainda não disponíveis/);
   assert.match(report,/viajante_nome_informado \|\| item\.solicitacao\.funcionario/);
-  assert.match(email,/sol\.viajante_nome_informado\|\|privateTraveler/);
+  assert.match(email,/resolveTravelerName\(sol\.viajante_nome_informado,privateTraveler\?\.nome,traveler\?\.nome\)/);
 });
