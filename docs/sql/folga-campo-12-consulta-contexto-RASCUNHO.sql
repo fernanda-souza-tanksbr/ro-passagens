@@ -21,9 +21,18 @@ begin
   if p_funcionario_id is null or p_obra_id is null then
     raise exception 'FUNCIONARIO_CC_OBRIGATORIOS';
   end if;
-  -- BLOQUEADOR DE SEGURANCA: inserir validacao de autorizacao para
-  -- consultar o funcionario, equivalente ao fluxo atual do RO Passagens.
-  -- Sem esta verificacao, NAO conceder EXECUTE a authenticated.
+  -- Mesmos filtros canonicos de funcionario e CC atualmente aplicados
+  -- pelo catalogo e pelo trigger ro_validar_solicitacao_visibilidade.
+  -- A helper de funcionarios e SECURITY DEFINER: chamada interna somente.
+  if not public.ro_funcionario_disponivel_para_usuario(auth.uid(),p_funcionario_id) then
+    raise exception 'FUNCIONARIO_INDISPONIVEL';
+  end if;
+  if not exists (
+    select 1 from public.ro_catalogo_centros_custo() c
+    where c.id=p_obra_id
+  ) then
+    raise exception 'CENTRO_CUSTO_INDISPONIVEL';
+  end if;
   select * into v_atual from public.ro_folga_alocacoes
   where funcionario_id=p_funcionario_id and encerrada_em is null
   order by iniciada_em desc limit 1;
@@ -64,5 +73,8 @@ $$;
 revoke all on function public.ro_consultar_contexto_distancia_folga(uuid,uuid)
   from public,anon,authenticated;
 
--- ATENCAO: antes de habilitar, implementar autorizacao por funcionario,
--- testar que colaboradores privados nao vazem dados e confirmar grants.
+-- A autorizacao agora reflete os catalogos atuais. Ainda nao conceder EXECUTE:
+-- 1. exercitar casos negativos (anon, CC restrito, funcionario indisponivel);
+-- 2. validar como funcionarios com vinculo privado devem operar;
+-- 3. revisar exposicao de historico e consulta por perfis no teste integrado;
+-- 4. garantir que grants nao exponham tabelas auxiliares diretamente.
