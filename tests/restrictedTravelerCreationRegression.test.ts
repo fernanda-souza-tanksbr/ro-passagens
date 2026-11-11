@@ -5,7 +5,7 @@ import test from "node:test";
 const migration=readFileSync("supabase/migrations/202610140001_corrige_regressao_disponibilidade_restrito_ro.sql","utf8");
 const previous=readFileSync("supabase/migrations/202610060001_regras_especiais_rh.sql","utf8");
 const helper=readFileSync("supabase/migrations/202609210002_corrige_disponibilidade_viajantes_restrito_ro.sql","utf8");
-const catalog=readFileSync("supabase/migrations/202609220001_corrige_visibilidade_catalogo_viajantes.sql","utf8");
+const catalog=readFileSync("supabase/migrations/202609210001_autossolicitacao_funcionario_restrito.sql","utf8");
 const frontend=readFileSync("src/pages.tsx","utf8");
 const catalogCache=readFileSync("src/catalogCache.ts","utf8");
 const errors=readFileSync("src/creationErrorMessages.ts","utf8");
