@@ -100,7 +100,7 @@ begin
       and s.motivo='folga_campo'
       and s.status='finalizada'
       and s.aprovacao_status in ('aprovada','dispensada')
-      and s.data_ida<=pg_catalog.current_date
+      and s.data_ida <= (pg_catalog.now() at time zone 'America/Sao_Paulo')::date
     order by s.data_ida desc,s.id desc
     limit 1;
     v_proxima := case when v_ultima_data is not null
