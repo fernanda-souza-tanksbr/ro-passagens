@@ -84,9 +84,12 @@ end $$;
 -- permite uma segunda criacao valida.
 DO $$
 begin
+  -- A fixture exige o mesmo contexto usado pela RPC legitima de aprovacao.
+  perform pg_catalog.set_config('ro.aprovacao_rpc','1',true);
   update public.ro_passagem_solicitacoes
      set aprovacao_status='reprovada'
    where id='00000000-0000-0000-0000-000000000601';
+  perform pg_catalog.set_config('ro.aprovacao_rpc','',true);
   perform public.ro_criar_folga_campo_com_distancia(
     jsonb_build_object(
       'id','00000000-0000-0000-0000-000000000603',
