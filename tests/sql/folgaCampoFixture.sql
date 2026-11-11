@@ -76,7 +76,9 @@ begin
  return v_id;
 end;
 $$;
-insert into public.funcionarios(id) values ('00000000-0000-0000-0000-000000000101');
+insert into public.funcionarios(id) values
+('00000000-0000-0000-0000-000000000101'),
+('00000000-0000-0000-0000-000000000102');
 insert into public.obras(id,nome) values
 ('00000000-0000-0000-0000-000000000201','CC A'),
 ('00000000-0000-0000-0000-000000000202','CC B'),
