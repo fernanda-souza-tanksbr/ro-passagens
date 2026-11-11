@@ -61,4 +61,4 @@ jobs:
             -c "create trigger ro_auditar_ciclo_folga_campo after insert or update of status on public.ro_passagem_solicitacoes for each row execute function public.ro_auditar_ciclo_folga_campo()"
 
       - name: Validar rollback e snapshots em transacoes reais
-        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoTransacoes.sql -f tests/sql/folgaCampoPermissoes.sql
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoTransacoes.sql -f tests/sql/folgaCampoPermissoes.sql -f tests/sql/folgaCampoAprovacoes.sql
