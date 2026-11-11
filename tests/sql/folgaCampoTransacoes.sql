@@ -1,5 +1,7 @@
 -- Testes reais em PostgreSQL descartavel. Nunca conectar ao Supabase real.
 \set ON_ERROR_STOP on
+-- Nova conexao psql para a etapa de testes: configurar UID simulado aqui.
+select pg_catalog.set_config('test.uid','00000000-0000-0000-0000-000000000001',false);
 DO $$
 declare v_id uuid := '00000000-0000-0000-0000-000000000301';
 declare v_s public.ro_passagem_solicitacoes%rowtype;
