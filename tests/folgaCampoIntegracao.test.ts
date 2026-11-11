@@ -27,3 +27,14 @@ test("reutilizacao da alocacao vigente nao exige nova declaracao", () => {
   assert.equal(r.ok,true);
   if(r.ok) assert.equal(r.exigeDeclaracao,false);
 });
+
+test("distancia salva corrompida retorna erro controlado, sem excecao", () => {
+  for (const kmSalvo of [-1, 12.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.deepEqual(prepararFolgaCampo({...base, kmSalvo, kmInformado: ""}), {ok:false,motivo:"DISTANCIA_INVALIDA"});
+  }
+});
+test("primeira folga sem historico nao e antecipada", () => {
+  const r=prepararFolgaCampo({...base,historico:[]});
+  assert.equal(r.ok,true);
+  if(r.ok) { assert.equal(r.proximaPrevista,null); assert.equal(r.antecipada,false); }
+});
