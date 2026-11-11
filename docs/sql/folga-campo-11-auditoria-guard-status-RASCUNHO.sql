@@ -3,36 +3,43 @@
 -- As tres funcoes abaixo devem ser ativadas junto com o trigger coordenado.
 -- Nao altera o sistema oficial de alocacao.
 
--- (1) AUDITORIA: para o novo fluxo, a proxima previsao deriva da data_ida
+-- (1) AUDITORIA: separar INSERT e UPDATE para nunca acessar OLD em INSERT.
+-- Para o novo fluxo, a proxima previsao deriva da data_ida
 -- efetiva e do intervalo congelado; para legado, mantem comportamento atual.
 create or replace function public.ro_auditar_ciclo_folga_campo()
 returns trigger language plpgsql security definer
 set search_path = 'public','pg_temp'
 as $$
 begin
-  if new.motivo='folga_campo' and tg_op='INSERT' then
-    insert into public.ro_auditoria_interna(evento,solicitacao_id,detalhes,criado_por)
-    values('ciclo_folga_calculado',new.id,
-      pg_catalog.jsonb_build_object(
-        'sem_historico',new.folga_ciclo_anterior_id is null,
-        'ciclo_anterior_id',new.folga_ciclo_anterior_id,
-        'data_prevista',new.folga_data_prevista_ciclo,
-        'data_ida',new.data_ida,'antecipada',new.folga_antecipada,
-        'justificativa',new.folga_antecipacao_justificativa,
-        'distancia_km',new.folga_distancia_km,
-        'intervalo_dias',new.folga_intervalo_dias),auth.uid());
-  elsif new.motivo='folga_campo'
-    and old.status is distinct from 'finalizada'
-    and new.status='finalizada' then
-    insert into public.ro_auditoria_interna(evento,solicitacao_id,detalhes,criado_por)
-    values('ciclo_folga_avancado',new.id,
-      pg_catalog.jsonb_build_object(
-        'ancora',case when new.folga_alocacao_id is null
-                      then new.folga_data_prevista_ciclo else new.data_ida end,
-        'proxima_prevista',case when new.folga_alocacao_id is null
-                          then new.folga_data_prevista_ciclo + 90
-                          else new.data_ida + new.folga_intervalo_dias end,
-        'intervalo_dias',new.folga_intervalo_dias),auth.uid());
+  -- INSERT nao pode acessar OLD: registro nao atribuido nesta operacao.
+  if tg_op='INSERT' then
+    if new.motivo='folga_campo' then
+      insert into public.ro_auditoria_interna(evento,solicitacao_id,detalhes,criado_por)
+      values('ciclo_folga_calculado',new.id,
+        pg_catalog.jsonb_build_object(
+          'sem_historico',new.folga_ciclo_anterior_id is null,
+          'ciclo_anterior_id',new.folga_ciclo_anterior_id,
+          'data_prevista',new.folga_data_prevista_ciclo,
+          'data_ida',new.data_ida,'antecipada',new.folga_antecipada,
+          'justificativa',new.folga_antecipacao_justificativa,
+          'distancia_km',new.folga_distancia_km,
+          'intervalo_dias',new.folga_intervalo_dias),auth.uid());
+    end if;
+  elsif tg_op='UPDATE' then
+    if new.motivo='folga_campo'
+       and old.status is distinct from 'finalizada'
+       and new.status='finalizada' then
+      insert into public.ro_auditoria_interna(evento,solicitacao_id,detalhes,criado_por)
+      values('ciclo_folga_avancado',new.id,
+        pg_catalog.jsonb_build_object(
+          'ancora',case when new.folga_alocacao_id is null
+                        then new.folga_data_prevista_ciclo else new.data_ida end,
+          'proxima_prevista',case when new.folga_alocacao_id is null
+                            then new.folga_data_prevista_ciclo + 90
+                            else new.data_ida + new.folga_intervalo_dias end,
+          'intervalo_dias',new.folga_intervalo_dias,
+          'aprovacao_status',new.aprovacao_status),auth.uid());
+    end if;
   end if;
   return new;
 end;
