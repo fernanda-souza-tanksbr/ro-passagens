@@ -44,6 +44,7 @@ import { deduplicateNotifications } from "./notifications";
 import { buildPurchaseCosts, totalTicketValues } from "./purchaseCosts";
 import { buildPurchaseAttachmentInsert } from "./purchaseAttachmentPayload";
 import { supabase } from "./supabase";
+import { planejarRotaCriacao } from "./folgaCampoCompatibilidade";
 import { invalidateAccess } from "./accessCache";
 import { getCatalogCacheUser, invalidateCatalogs, loadCatalogs, subscribeCatalogInvalidation } from "./catalogCache";
 import { subscribeVisible } from "./visibilityRevalidation";
@@ -1342,6 +1343,16 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
       documentos.push({categoria,storage_path:uploadedPath,arquivo_nome:documento.name,tamanho_bytes:documento.size});
     }
     const payload=normalizarCamposRetorno({...form,aprovador_id:dispensaAprovacao?"":form.aprovador_id,id,colaborador_id:viajanteManual?null:funcionarioSelecionado?.funcionario_id===funcionarioSelecionado?.id?null:funcionarioSelecionado?.id,funcionario_id:viajanteManual?null:funcionarioSelecionado?.funcionario_id||null,viajante_nome_informado:viajanteManual?form.viajante_nome_informado:null,solicitar_excecao_prazo:!operadorRoPodeCadastrarRetroativa&&podeExcepcionarPrazo&&permiteExcecaoPrazo&&solicitarExcecao,usar_destino_excepcional:motivoResidencial&&!!destinoResidencial?.possui_endereco?false:motivoResidencial&&destinoDiferente,destino_residencial_justificativa:motivoResidencial&&destinoDiferente?justificativaDestino:""});
+    // Mantido DESATIVADO ate backend, migracao e testes transacionais aprovados.
+    // Nao ativar por variavel de ambiente ou configuracao remota nesta fase.
+    const rotaFolga = planejarRotaCriacao(form.motivo, false, null);
+    if (!rotaFolga.ok) {
+      if (uploadedPath) await supabase.storage.from("ro-documentos-internos").remove([uploadedPath]);
+      setErro("Não foi possível validar o contexto da Folga de Campo.");
+      setBusy(false);
+      return;
+    }
+    // A unica rota alcancavel nesta fase e a RPC existente.
     const { data: created, error } = await supabase.rpc("ro_criar_solicitacao_com_aprovador", { p_solicitacao:payload, p_documentos:documentos });
     if (error) {
       if(uploadedPath) await supabase.storage.from("ro-documentos-internos").remove([uploadedPath]);
