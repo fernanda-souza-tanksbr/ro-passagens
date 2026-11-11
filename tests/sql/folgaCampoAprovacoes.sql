@@ -176,4 +176,47 @@ begin
     (select count(*) from ro_private.folga_criacao_contexto)<>0
  then raise exception 'ROLLBACK_POS_APROVACAO_INCOMPLETO';end if;
 end $$;
+-- Aprovacao pendente por coordenador diferente do solicitante:
+-- verificar que o UPDATE do aprovador nao modifica snapshot nem ciclo.
+DO $
+declare v_id uuid:='00000000-0000-0000-0000-000000000404';
+  v_snapshot integer; v_previsao date; v_erro text;
+begin
+ insert into public.user_roles(user_id,role)
+ values ('00000000-0000-0000-0000-000000000002','coordenador');
+ perform public.ro_criar_folga_campo_com_distancia(
+  jsonb_build_object('id',v_id,
+   'funcionario_id','00000000-0000-0000-0000-000000000101',
+   'obra_id','00000000-0000-0000-0000-000000000201',
+   'motivo','folga_campo','data_ida','2027-03-05',
+   'aprovador_id','00000000-0000-0000-0000-000000000002'),
+  '[]'::jsonb,null,false);
+ select folga_distancia_km,folga_data_prevista_ciclo
+ into v_snapshot,v_previsao
+ from public.ro_passagem_solicitacoes where id=v_id;
+ if (select aprovacao_status from public.ro_passagem_solicitacoes where id=v_id)<>'pendente'
+ then raise exception 'APROVACAO_NAO_PENDENTE';end if;
+ -- Simula a RPC de decisao que, em producao, e a unica autorizada a atualizar.
+ perform pg_catalog.set_config('ro.aprovacao_rpc','1',true);
+ update public.ro_passagem_solicitacoes set aprovacao_status='reprovada'
+ where id=v_id;
+ perform pg_catalog.set_config('ro.aprovacao_rpc','',true);
+ if (select folga_distancia_km from public.ro_passagem_solicitacoes where id=v_id)
+    is distinct from v_snapshot
+ or (select folga_data_prevista_ciclo from public.ro_passagem_solicitacoes where id=v_id)
+    is distinct from v_previsao
+ then raise exception 'REPROVACAO_ALTEROU_CICLO_OU_SNAPSHOT';end if;
+ -- Alteracao direta da aprovacao sem a RPC continua bloqueada.
+ begin
+  update public.ro_passagem_solicitacoes set aprovacao_status='aprovada'
+  where id=v_id;
+  raise exception 'TESTE_DEVERIA_FALHAR';
+ exception when others then
+  get stacked diagnostics v_erro=message_text;
+  if v_erro not like '%CAMPOS_APROVACAO_SOMENTE_POR_RPC%' then
+    raise exception 'PROTECAO_APROVACAO_INOPERANTE: %',v_erro;
+  end if;
+ end;
+end $;
+
 select 'FOLGA_APROVACOES_ISOLADAS_OK' as resultado;
