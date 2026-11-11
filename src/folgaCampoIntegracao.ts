@@ -1,4 +1,4 @@
-import { calcularCicloFolga, estadoQuilometragem, regimePorDistancia, type FolgaAnterior } from "./folgaCampoRegimes";
+import { calcularCicloFolga, estadoQuilometragem, regimePorDistancia, type FolgaAnterior } from "./folgaCampoRegimes.ts";
 
 export type ContextoFolgaCampo = {
   funcionarioId: string;
