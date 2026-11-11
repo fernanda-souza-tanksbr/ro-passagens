@@ -1,6 +1,8 @@
 -- Banco descartavel para validar os rascunhos de Folga de Campo.
 -- Somente fixtures ficticias; NUNCA apontar ao Supabase de producao.
 \set ON_ERROR_STOP on
+create role anon nologin;
+create role authenticated nologin;
 create schema if not exists auth;
 create function auth.uid() returns uuid language sql stable as $$
  select nullif(pg_catalog.current_setting('test.uid',true),'')::uuid
