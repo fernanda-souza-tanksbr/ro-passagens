@@ -12,9 +12,9 @@ create table public.obras(id uuid primary key, nome text not null, visivel_passa
 create table public.user_roles(user_id uuid not null, role text not null);
 create table public.ro_responsaveis(user_id uuid not null, ativo boolean not null default true);
 create function public.ro_is_operador_ativo(p_user uuid)
-returns boolean language sql stable as $
+returns boolean language sql stable as $$
  select exists(select 1 from public.ro_responsaveis where user_id=p_user and ativo)
-$;
+$$;
 create table public.ro_passagem_solicitacoes(
  id uuid primary key default gen_random_uuid(),
  funcionario_id uuid references public.funcionarios(id),
