@@ -45,6 +45,11 @@ import { buildPurchaseCosts, totalTicketValues } from "./purchaseCosts";
 import { buildPurchaseAttachmentInsert } from "./purchaseAttachmentPayload";
 import { supabase } from "./supabase";
 import { planejarRotaCriacao } from "./folgaCampoCompatibilidade";
+import { FolgaCampoQuilometragem } from "./FolgaCampoQuilometragem";
+import { consultarContextoFolga } from "./folgaCampoConsulta";
+import type { ContextoDistanciaServidor } from "./folgaCampoContextoServidor";
+// Ativacao proibida antes de migracao, autorizacao de consulta e testes completos.
+const NOVO_FLUXO_FOLGA_ATIVO = false;
 import { invalidateAccess } from "./accessCache";
 import { getCatalogCacheUser, invalidateCatalogs, loadCatalogs, subscribeCatalogInvalidation } from "./catalogCache";
 import { subscribeVisible } from "./visibilityRevalidation";
@@ -1056,6 +1061,12 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
   const [anosCalendario, setAnosCalendario] = useState<Array<{ano:number;completo:boolean}>>([]);
   const [documento, setDocumento] = useState<File | null>(null);
   const [documentoDraft, setDocumentoDraft] = useState<NovaSolicitacaoDraftDocument | null>(null);
+  const [contextoKmFolga,setContextoKmFolga]=useState<ContextoDistanciaServidor|null>(null);
+  const [kmFolgaInformado,setKmFolgaInformado]=useState("");
+  const [confirmacaoKmFolga,setConfirmacaoKmFolga]=useState(false);
+  const [kmFolgaLoading,setKmFolgaLoading]=useState(false);
+  const [kmFolgaErro,setKmFolgaErro]=useState("");
+  const kmFolgaRequestRef=useRef(0);
   const [cicloFolga,setCicloFolga]=useState<CicloFolga|null>(null);
   const [cicloLoading,setCicloLoading]=useState(false);
   const [destinoResidencial,setDestinoResidencial]=useState<{possui_endereco:boolean;cidade:string|null;uf:string|null}|null>(null);
@@ -1173,6 +1184,29 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
     setCicloLoading(true);
     supabase.rpc("ro_obter_ciclo_folga_funcionario",{p_funcionario_id:obrasId}).then(({data,error})=>{setCicloFolga(error?null:data as CicloFolga);if(error)setErro("Não foi possível consultar o ciclo de folga de campo.");setCicloLoading(false);});
   },[form.funcionario_id,form.motivo,funcionarios]);
+  // Isolado do ciclo legado. Nenhuma RPC nova e chamada com a flag desligada.
+  useEffect(()=>{
+    const request=++kmFolgaRequestRef.current;
+    setContextoKmFolga(null);
+    setKmFolgaInformado("");
+    setConfirmacaoKmFolga(false);
+    setKmFolgaErro("");
+    setKmFolgaLoading(false);
+    const funcionarioId=funcionarios.find(x=>x.id===form.funcionario_id)?.funcionario_id;
+    if(!NOVO_FLUXO_FOLGA_ATIVO||form.motivo!=="folga_campo"||!funcionarioId||!form.obra_id)return;
+    setKmFolgaLoading(true);
+    void consultarContextoFolga(funcionarioId,form.obra_id,true,
+      async(args)=>supabase.rpc("ro_consultar_contexto_distancia_folga",args)
+    ).then((contexto)=>{
+      if(request!==kmFolgaRequestRef.current)return;
+      setContextoKmFolga(contexto);
+    }).catch(()=>{
+      if(request!==kmFolgaRequestRef.current)return;
+      setKmFolgaErro("Não foi possível consultar a quilometragem para este centro de custo.");
+    }).finally(()=>{
+      if(request===kmFolgaRequestRef.current)setKmFolgaLoading(false);
+    });
+  },[form.funcionario_id,form.obra_id,form.motivo,funcionarios]);
   const motivoResidencial=["ferias","folga_campo","recesso"].includes(form.motivo);
   useEffect(()=>{setDestinoResidencial(null);setDestinoDiferente(false);setJustificativaDestino("");if(!motivoResidencial||!form.funcionario_id)return;const selected=funcionarios.find(x=>x.id===form.funcionario_id);if(!selected)return;const request=selected.funcionario_id===selected.id?supabase.rpc("ro_obter_destino_residencial_resumido",{p_funcionario_id:selected.id}):supabase.rpc("ro_obter_destino_colaborador_resumido",{p_colaborador_id:selected.id});request.then(({data,error})=>{if(error){setErro("Não foi possível consultar o destino residencial.");return}const result=(Array.isArray(data)?data[0]:data) as {possui_endereco:boolean;cidade:string|null;uf:string|null};setDestinoResidencial(result);if(result?.possui_endereco)setForm(atual=>({...atual,destino:`${result.cidade} / ${result.uf}`}));else setForm(atual=>({...atual,destino:""}))})},[form.funcionario_id,form.motivo,motivoResidencial,funcionarios]);
   const regra = regraPrazo(form.motivo || null, form.desligamento_subtipo || null, access.isRh);
@@ -1407,6 +1441,22 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
           <CostCenterCombobox required options={obras} value={form.obra_id}
             onChange={(obra_id) => setForm((atual) => ({ ...atual, obra_id }))}/>
         </label>
+        {NOVO_FLUXO_FOLGA_ATIVO && form.motivo==="folga_campo" && (
+          <div>
+            {kmFolgaLoading && <p>Consultando quilometragem do centro de custo...</p>}
+            {kmFolgaErro && <p role="alert">{kmFolgaErro}</p>}
+            {!kmFolgaLoading && !kmFolgaErro && contextoKmFolga && (
+              <FolgaCampoQuilometragem
+                kmSalvo={contextoKmFolga.distancia_km}
+                retornoAoCc={contextoKmFolga.retorno_ao_cc}
+                kmInformado={kmFolgaInformado}
+                confirmado={confirmacaoKmFolga}
+                onKmChange={setKmFolgaInformado}
+                onConfirmChange={setConfirmacaoKmFolga}
+              />
+            )}
+          </div>
+        )}
         {form.motivo === "transferencia_obra" && (
           <label>
             Centro de custo destino *
