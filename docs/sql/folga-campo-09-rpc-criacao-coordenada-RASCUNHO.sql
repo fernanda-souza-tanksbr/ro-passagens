@@ -44,10 +44,18 @@ begin
   if v_id is null or v_funcionario is null or v_obra is null then
     raise exception 'IDENTIFICADORES_OBRIGATORIOS';
   end if;
-  -- IMPORTANTE: a verificacao de autorizacao para criar em nome do
-  -- funcionario deve ser a MESMA da cadeia legada, antes de qualquer
-  -- escrita de episodio. A cadeia legada sera chamada abaixo e, se
-  -- recusar, toda a transacao sera revertida.
+  -- Validacao previa equivalente aos filtros canonicos do trigger
+  -- ro_validar_solicitacao_visibilidade. A cadeia legada continua sendo
+  -- executada e permanece autoridade final sobre todas as demais regras.
+  if not public.ro_funcionario_disponivel_para_usuario(auth.uid(),v_funcionario) then
+    raise exception 'FUNCIONARIO_INDISPONIVEL';
+  end if;
+  if not exists (
+    select 1 from public.ro_catalogo_centros_custo() c
+    where c.id=v_obra
+  ) then
+    raise exception 'CENTRO_CUSTO_INDISPONIVEL';
+  end if;
   v_episodio := ro_private.preparar_episodio_folga(
     v_funcionario,v_obra,p_distancia_declarada_km,p_confirma_retorno
   );
