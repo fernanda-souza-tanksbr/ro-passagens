@@ -16,7 +16,9 @@ export type PreparacaoFolgaCampo =
 
 export function prepararFolgaCampo(c: ContextoFolgaCampo): PreparacaoFolgaCampo {
   if (!c.funcionarioId || !c.obraId) return { ok: false, motivo: "FUNCIONARIO_OU_CC_OBRIGATORIO" };
-  const estado = estadoQuilometragem(c.kmSalvo, c.retornoAoCc);
+  let estado: ReturnType<typeof estadoQuilometragem>;
+  try { estado = estadoQuilometragem(c.kmSalvo, c.retornoAoCc); }
+  catch { return { ok: false, motivo: "DISTANCIA_INVALIDA" }; }
   if (estado === "informar" && !c.kmInformado.trim()) return { ok: false, motivo: "DISTANCIA_OBRIGATORIA" };
   const km = estado === "informar" ? Number(c.kmInformado) : c.kmSalvo;
   if (km === null || (estado === "informar" && !/^\d+$/.test(c.kmInformado.trim()))) return { ok: false, motivo: "DISTANCIA_INVALIDA" };
