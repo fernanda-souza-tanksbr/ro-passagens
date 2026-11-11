@@ -64,5 +64,8 @@ jobs:
       - name: Validar rollback e snapshots em transacoes reais
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoTransacoes.sql -f tests/sql/folgaCampoPermissoes.sql -f tests/sql/folgaCampoAprovacoes.sql
 
+      - name: Validar regra real de folga futura duplicada
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoDuplicidadeReal.sql
+
       - name: Simular concorrencia entre duas transacoes
         run: bash tests/sql/folgaCampoConcorrencia.sh
