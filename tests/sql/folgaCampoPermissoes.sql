@@ -86,4 +86,43 @@ begin
  ) then raise exception 'AUDITORIA_CORRECAO_INCOMPLETA';end if;
 end $$;
 
+-- Coordenador com conta Auth bloqueada ou excluida nao pode corrigir.
+DO $
+declare v_id uuid;v_km integer;v_err text;v_audit int;
+begin
+ select id,distancia_km into strict v_id,v_km
+ from public.ro_folga_alocacoes
+ where funcionario_id='00000000-0000-0000-0000-000000000101'
+   and encerrada_em is null;
+ select count(*) into v_audit from public.ro_folga_distancia_auditoria;
+ update auth.users set banned_until=now()+interval '1 day'
+ where id='00000000-0000-0000-0000-000000000001';
+ begin
+   perform public.ro_corrigir_distancia_folga(v_id,230,'Correcao indevida por banido');
+   raise exception 'BANIDO_PODE_CORRIGIR';
+ exception when others then
+   get stacked diagnostics v_err=message_text;
+   if v_err not like '%CORRECAO_QUILOMETRAGEM_NAO_AUTORIZADA%' then
+     raise exception 'ERRO_INESPERADO_BANIDO: %',v_err;
+   end if;
+ end;
+ update auth.users set banned_until=null,deleted_at=now()
+ where id='00000000-0000-0000-0000-000000000001';
+ begin
+   perform public.ro_corrigir_distancia_folga(v_id,230,'Correcao indevida por excluido');
+   raise exception 'EXCLUIDO_PODE_CORRIGIR';
+ exception when others then
+   get stacked diagnostics v_err=message_text;
+   if v_err not like '%CORRECAO_QUILOMETRAGEM_NAO_AUTORIZADA%' then
+     raise exception 'ERRO_INESPERADO_EXCLUIDO: %',v_err;
+   end if;
+ end;
+ update auth.users set deleted_at=null
+ where id='00000000-0000-0000-0000-000000000001';
+ if (select distancia_km from public.ro_folga_alocacoes where id=v_id)<>v_km
+    or (select count(*) from public.ro_folga_distancia_auditoria)<>v_audit
+ then raise exception 'USUARIO_BLOQUEADO_ALTEROU_DISTANCIA_OU_AUDITORIA';
+ end if;
+end $;
+
 select 'FOLGA_SQL_PERMISSOES_OK' as resultado;
