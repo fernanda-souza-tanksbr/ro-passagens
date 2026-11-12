@@ -56,6 +56,7 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -c "drop function public.ro_obter_ciclo_folga_funcionario(uuid)"
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoLegadoRealCaptura.sql
           psql -X -v ON_ERROR_STOP=1 -f docs/implantacao/folga-campo-etapa-b-coordenada-RASCUNHO.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoMocksAposB.sql
 
       - name: Conferir grants e RLS no pacote isolado
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoGrants.sql
