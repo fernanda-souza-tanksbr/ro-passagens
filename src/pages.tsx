@@ -1411,7 +1411,7 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
       && funcionarioSelecionado.id!==funcionarioSelecionado.funcionario_id
       ? funcionarioSelecionado.id : null;
     const contextoFolga=NOVO_FLUXO_FOLGA_ATIVO && form.motivo==="folga_campo"
-      && contextoKmFolga?.funcionario_id===funcionarioFolgaId
+      && (!funcionarioFolgaId || contextoKmFolga?.funcionario_id===funcionarioFolgaId)
       && contextoKmFolga?.colaborador_id===colaboradorFolgaId
       && contextoKmFolga?.obra_id===form.obra_id
       ? {
