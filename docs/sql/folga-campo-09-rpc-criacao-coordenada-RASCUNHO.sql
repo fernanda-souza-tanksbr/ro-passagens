@@ -47,7 +47,7 @@ begin
   -- Validacao previa equivalente aos filtros canonicos do trigger
   -- ro_validar_solicitacao_visibilidade. A cadeia legada continua sendo
   -- executada e permanece autoridade final sobre todas as demais regras.
-  if not public.ro_funcionario_disponivel_para_usuario(auth.uid(),v_funcionario) then
+  if public.ro_funcionario_disponivel_para_usuario(auth.uid(),v_funcionario) is distinct from true then
     raise exception 'FUNCIONARIO_INDISPONIVEL';
   end if;
   if not exists (
