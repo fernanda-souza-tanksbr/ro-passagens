@@ -1,12 +1,12 @@
--- RASCUNHO - ETAPA A / ADITIVA, NAO EXECUTAR NA PRODUCAO.
--- Nenhum trigger existente sera alterado. As RPCs continuam sem EXECUTE.
--- Exige backup, verificacao da versao de referencia e autorizacao.
+-- RASCUNHO ETAPA A - NAO EXECUTAR NA PRODUCAO.
+-- Estruturas adicionais e RPCs SEM GRANTS. Exige backup e autorizacao.
 begin;
 do $guard$
 begin
   if to_regclass('public.ro_passagem_solicitacoes') is null
     or to_regclass('public.funcionarios') is null
     or to_regclass('public.obras') is null
+    or to_regclass('public.ro_funcionarios_enderecos_privados') is null
     or to_regprocedure('public.ro_criar_solicitacao_com_aprovador(jsonb,jsonb)') is null
   then raise exception 'PREFLIGHT_RO_PASSAGENS_INCOMPATIVEL'; end if;
 end
@@ -19,7 +19,9 @@ $guard$;
 
 create table if not exists public.ro_folga_alocacoes (
   id uuid primary key default gen_random_uuid(),
-  funcionario_id uuid not null references public.funcionarios(id),
+  funcionario_id uuid references public.funcionarios(id),
+  colaborador_id uuid references public.ro_funcionarios_enderecos_privados(id),
+  constraint ro_folga_alocacoes_identidade check (num_nonnulls(funcionario_id,colaborador_id)=1),
   obra_id uuid not null references public.obras(id),
   iniciada_em timestamptz not null default now(),
   encerrada_em timestamptz,
@@ -32,9 +34,14 @@ create table if not exists public.ro_folga_alocacoes (
 );
 create unique index if not exists ro_folga_alocacao_ativa_unica
   on public.ro_folga_alocacoes(funcionario_id)
-  where encerrada_em is null;
+  where encerrada_em is null and funcionario_id is not null;
+create unique index if not exists ro_folga_alocacao_privada_ativa_unica
+  on public.ro_folga_alocacoes(colaborador_id)
+  where encerrada_em is null and colaborador_id is not null;
 create index if not exists ro_folga_alocacoes_funcionario_obra
   on public.ro_folga_alocacoes(funcionario_id,obra_id,iniciada_em desc);
+create index if not exists ro_folga_alocacoes_colaborador_obra
+  on public.ro_folga_alocacoes(colaborador_id,obra_id,iniciada_em desc);
 alter table public.ro_folga_alocacoes enable row level security;
 revoke all on public.ro_folga_alocacoes from anon,authenticated;
 
@@ -104,7 +111,9 @@ create schema if not exists ro_private;
 
 create table if not exists ro_private.folga_criacao_contexto (
   solicitacao_id uuid primary key,
-  funcionario_id uuid not null references public.funcionarios(id),
+  funcionario_id uuid references public.funcionarios(id),
+  colaborador_id uuid references public.ro_funcionarios_enderecos_privados(id),
+  constraint ro_folga_contexto_identidade check (num_nonnulls(funcionario_id,colaborador_id)=1),
   obra_id uuid not null references public.obras(id),
   alocacao_id uuid not null references public.ro_folga_alocacoes(id),
   distancia_km integer not null check (distancia_km >= 0),
@@ -130,7 +139,7 @@ revoke all on schema ro_private from anon, authenticated;
 --
 -- Padrao para o BEFORE INSERT trigger coordenado:
 -- SELECT * FROM ro_private.folga_criacao_contexto
--- WHERE solicitacao_id=NEW.id AND funcionario_id=NEW.funcionario_id
+-- WHERE solicitacao_id=NEW.id AND (funcionario_id=NEW.funcionario_id OR colaborador_id=NEW.colaborador_id)
 -- AND obra_id=NEW.obra_id AND criado_por=auth.uid();
 -- Se encontrou, aplicar snapshot ANTES da insercao e calcular ciclo novo.
 -- Se nao encontrou, manter caminho legado sem exigir km.
@@ -160,7 +169,8 @@ create or replace function ro_private.preparar_episodio_folga(
   p_funcionario_id uuid,
   p_obra_id uuid,
   p_distancia_declarada_km integer,
-  p_confirma_retorno boolean
+  p_confirma_retorno boolean,
+  p_colaborador_id uuid default null
 ) returns jsonb
 language plpgsql
 security definer
@@ -177,17 +187,19 @@ declare
   v_acao text;
 begin
   if auth.uid() is null then raise exception 'AUTENTICACAO_OBRIGATORIA'; end if;
-  if p_funcionario_id is null or p_obra_id is null then
-    raise exception 'FUNCIONARIO_CC_OBRIGATORIOS';
+  if pg_catalog.num_nonnulls(p_funcionario_id,p_colaborador_id)<>1
+     or p_obra_id is null then
+    raise exception 'IDENTIDADE_CC_OBRIGATORIOS';
   end if;
   -- A RPC chamadora deve confirmar autorizacao para criar em nome do funcionario.
   -- Este lock deve ser compartilhado com a validacao de ciclo.
   perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended(p_funcionario_id::text, 904)
+    pg_catalog.hashtextextended(coalesce(p_funcionario_id::text,'privado:'||p_colaborador_id::text), 904)
   );
   select * into v_atual
   from public.ro_folga_alocacoes
-  where funcionario_id=p_funcionario_id and encerrada_em is null
+  where funcionario_id is not distinct from p_funcionario_id
+    and colaborador_id is not distinct from p_colaborador_id and encerrada_em is null
   for update;
 
   if v_atual.id is not null and v_atual.obra_id=p_obra_id then
@@ -201,7 +213,8 @@ begin
   else
     select * into v_anterior
     from public.ro_folga_alocacoes
-    where funcionario_id=p_funcionario_id and obra_id=p_obra_id
+    where funcionario_id is not distinct from p_funcionario_id
+      and colaborador_id is not distinct from p_colaborador_id and obra_id=p_obra_id
     order by iniciada_em desc,id desc limit 1;
 
     if v_anterior.id is not null then
@@ -228,9 +241,9 @@ begin
       where id=v_atual.id;
     end if;
     insert into public.ro_folga_alocacoes(
-      funcionario_id,obra_id,distancia_km,confirmada_em,confirmada_por,origem_alocacao_id
+      funcionario_id,colaborador_id,obra_id,distancia_km,confirmada_em,confirmada_por,origem_alocacao_id
     ) values (
-      p_funcionario_id,p_obra_id,v_km,pg_catalog.now(),auth.uid(),v_anterior.id
+      p_funcionario_id,p_colaborador_id,p_obra_id,v_km,pg_catalog.now(),auth.uid(),v_anterior.id
     ) returning id into v_novo_id;
     insert into public.ro_folga_distancia_auditoria(
       alocacao_id,distancia_anterior_km,distancia_nova_km,
@@ -246,12 +259,13 @@ begin
 
   return pg_catalog.jsonb_build_object(
     'alocacao_id',v_novo_id,'obra_id',p_obra_id,
+    'funcionario_id',p_funcionario_id,'colaborador_id',p_colaborador_id,
     'distancia_km',v_km,'regime_faixa',v_faixa,
     'intervalo_dias',v_intervalo,'transporte',v_transporte
   );
 end;
 $$;
-revoke all on function ro_private.preparar_episodio_folga(uuid,uuid,integer,boolean)
+revoke all on function ro_private.preparar_episodio_folga(uuid,uuid,integer,boolean,uuid)
   from public,anon,authenticated;
 
 -- INTEGRACAO AINDA NAO PRONTA:
@@ -299,7 +313,7 @@ as $$
 declare
   v_atual public.ro_folga_alocacoes%rowtype;
   v_user uuid := auth.uid();
-  v_funcionario_id uuid;
+  v_chave text;
 begin
   if v_user is null or not ro_private.pode_corrigir_distancia_folga(v_user) then
     raise exception 'CORRECAO_QUILOMETRAGEM_NAO_AUTORIZADA';
@@ -312,11 +326,11 @@ begin
   end if;
   -- Compartilha o advisory lock da criacao para serializar correcao e
   -- transferencia de CC do mesmo funcionario.
-  select funcionario_id into v_funcionario_id
-  from public.ro_folga_alocacoes where id=p_alocacao_id;
-  if v_funcionario_id is null then raise exception 'ALOCACAO_ATIVA_NAO_ENCONTRADA'; end if;
+  select coalesce(funcionario_id::text,'privado:'||colaborador_id::text)
+  into v_chave from public.ro_folga_alocacoes where id=p_alocacao_id;
+  if v_chave is null then raise exception 'ALOCACAO_ATIVA_NAO_ENCONTRADA'; end if;
   perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended(v_funcionario_id::text,904)
+    pg_catalog.hashtextextended(v_chave,904)
   );
   select * into v_atual
     from public.ro_folga_alocacoes
@@ -368,13 +382,17 @@ revoke all on function ro_private.corrigir_distancia_folga(uuid,integer,text) fr
 -- IMPORTANTE: validar politicas de acesso por funcionario antes de conceder EXECUTE.
 create or replace function public.ro_consultar_contexto_distancia_folga(
   p_funcionario_id uuid,
-  p_obra_id uuid
+  p_obra_id uuid,
+  p_colaborador_id uuid default null
 ) returns jsonb
 language plpgsql stable security definer
 set search_path = ''
 as $$
 declare
   v_atual public.ro_folga_alocacoes%rowtype;
+  v_funcionario uuid:=p_funcionario_id;
+  v_canonico_colaborador uuid;
+  v_vinculo uuid;
   v_anterior public.ro_folga_alocacoes%rowtype;
   v_km integer;
   v_estado text;
@@ -382,30 +400,38 @@ declare
   v_futura uuid;
 begin
   if auth.uid() is null then raise exception 'AUTENTICACAO_OBRIGATORIA'; end if;
-  if p_funcionario_id is null or p_obra_id is null then
-    raise exception 'FUNCIONARIO_CC_OBRIGATORIOS';
+  if p_obra_id is null or (p_funcionario_id is null and p_colaborador_id is null) then
+    raise exception 'IDENTIDADE_CC_OBRIGATORIOS';
   end if;
-  -- Mesmos filtros canonicos de funcionario e CC atualmente aplicados
-  -- pelo catalogo e pelo trigger ro_validar_solicitacao_visibilidade.
-  -- A helper de funcionarios e SECURITY DEFINER: chamada interna somente.
-  if public.ro_funcionario_disponivel_para_usuario(auth.uid(),p_funcionario_id) is distinct from true then
+  if p_colaborador_id is not null then
+    select e.funcionario_id into v_vinculo
+    from public.ro_funcionarios_enderecos_privados e
+    where e.id=p_colaborador_id and e.ativo;
+    if not found then raise exception 'COLABORADOR_INATIVO_OU_INEXISTENTE'; end if;
+    if p_funcionario_id is not null and p_funcionario_id is distinct from v_vinculo then
+      raise exception 'VINCULO_FUNCIONARIO_INCONSISTENTE';
+    end if;
+    v_funcionario:=v_vinculo;
+    if v_funcionario is null then v_canonico_colaborador:=p_colaborador_id; end if;
+  elsif public.ro_funcionario_disponivel_para_usuario(auth.uid(),v_funcionario) is distinct from true then
     raise exception 'FUNCIONARIO_INDISPONIVEL';
   end if;
   if not exists (
-    select 1 from public.ro_catalogo_centros_custo() c
-    where c.id=p_obra_id
-  ) then
-    raise exception 'CENTRO_CUSTO_INDISPONIVEL';
-  end if;
+    select 1 from public.ro_catalogo_centros_custo() c where c.id=p_obra_id
+  ) then raise exception 'CENTRO_CUSTO_INDISPONIVEL'; end if;
   select * into v_atual from public.ro_folga_alocacoes
-  where funcionario_id=p_funcionario_id and encerrada_em is null
+  where funcionario_id is not distinct from v_funcionario
+    and colaborador_id is not distinct from v_canonico_colaborador
+    and encerrada_em is null
   order by iniciada_em desc limit 1;
 
   if v_atual.id is not null and v_atual.obra_id=p_obra_id then
     v_estado:='reutilizar';v_km:=v_atual.distancia_km;
   else
     select * into v_anterior from public.ro_folga_alocacoes
-    where funcionario_id=p_funcionario_id and obra_id=p_obra_id
+    where funcionario_id is not distinct from v_funcionario
+      and colaborador_id is not distinct from v_canonico_colaborador
+      and obra_id=p_obra_id
     order by iniciada_em desc,id desc limit 1;
     if v_anterior.id is not null then
       v_estado:='confirmar';v_km:=v_anterior.distancia_km;
@@ -416,15 +442,28 @@ begin
 
   select s.data_ida into v_ultima
   from public.ro_passagem_solicitacoes s
-  where s.funcionario_id=p_funcionario_id and s.motivo='folga_campo'
+  where ((v_funcionario is not null and s.funcionario_id=v_funcionario)
+       or (v_funcionario is null and s.colaborador_id=v_canonico_colaborador))
+    and s.motivo='folga_campo'
     and s.status='finalizada'
     and s.aprovacao_status in ('aprovada','dispensada')
     and s.data_ida <= (pg_catalog.now() at time zone 'America/Sao_Paulo')::date
   order by s.data_ida desc,s.id desc limit 1;
 
-  v_futura:=public.ro_funcionario_possui_folga_futura_ativa(p_funcionario_id,null);
+  if v_funcionario is not null then
+    v_futura:=public.ro_funcionario_possui_folga_futura_ativa(v_funcionario,null);
+  else
+    select s.id into v_futura from public.ro_passagem_solicitacoes s
+    where s.colaborador_id=v_canonico_colaborador and s.motivo='folga_campo'
+      and s.excluida_em is null
+      and s.data_ida >= (pg_catalog.now() at time zone 'America/Sao_Paulo')::date
+      and s.status in ('solicitada','em_andamento','passagem_comprada')
+      and s.aprovacao_status is distinct from 'reprovada'
+    order by s.data_ida,s.created_at limit 1;
+  end if;
   return pg_catalog.jsonb_build_object(
-    'funcionario_id',p_funcionario_id,'obra_id',p_obra_id,
+    'funcionario_id',v_funcionario,'colaborador_id',p_colaborador_id,
+    'obra_id',p_obra_id,
     'distancia_km',v_km,'retorno_ao_cc',v_estado='confirmar',
     'estado',v_estado,'ultima_folga_data_ida',v_ultima,
     'proxima_folga_prevista',case when v_km is not null and v_ultima is not null
@@ -434,7 +473,7 @@ begin
   );
 end;
 $$;
-revoke all on function public.ro_consultar_contexto_distancia_folga(uuid,uuid)
+revoke all on function public.ro_consultar_contexto_distancia_folga(uuid,uuid,uuid)
   from public,anon,authenticated;
 
 -- A autorizacao agora reflete os catalogos atuais. Ainda nao conceder EXECUTE:
@@ -442,6 +481,7 @@ revoke all on function public.ro_consultar_contexto_distancia_folga(uuid,uuid)
 -- 2. validar como funcionarios com vinculo privado devem operar;
 -- 3. revisar exposicao de historico e consulta por perfis no teste integrado;
 -- 4. garantir que grants nao exponham tabelas auxiliares diretamente.
+
 
 
 -- ===== ORIGEM: docs/sql/folga-campo-14-rpc-correcao-RASCUNHO.sql =====
@@ -473,5 +513,6 @@ from public,anon,authenticated;
 
 -- A liberacao futura da RPC depende de homologacao de permissoes e auditoria,
 -- inclusive perfis sem acesso, RO inativo e usuario sem autenticacao.
+
 
 commit;
