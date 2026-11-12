@@ -84,3 +84,13 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f docs/implantacao/folga-campo-etapa-b-coordenada-RASCUNHO.sql
       - name: Validar operacoes com codigo legado real e controles integrados
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoEtapaBRealRegressao.sql
+      - name: Bloquear rollback B se o teste criou snapshots
+        run: |
+          if psql -X -v ON_ERROR_STOP=1 -f docs/implantacao/folga-campo-reversao-etapa-b-RASCUNHO.sql > /tmp/reversao_b_recusada.log 2>&1; then
+            echo "ERRO: rollback B aceitou dados novos"
+            exit 1
+          fi
+          grep -q 'REVERSAO_B_POSSUI_DADOS_NOVO_FLUXO' /tmp/reversao_b_recusada.log
+          test "$(psql -X -v ON_ERROR_STOP=1 -Atc "select to_regprocedure('public.ro_criar_folga_campo_com_distancia(jsonb,jsonb,integer,boolean)') is not null")" = "t"
+          test "$(psql -X -v ON_ERROR_STOP=1 -Atc "select ativo from ro_private.folga_configuracao where chave='novo_fluxo_distancia'")" = "f"
+
