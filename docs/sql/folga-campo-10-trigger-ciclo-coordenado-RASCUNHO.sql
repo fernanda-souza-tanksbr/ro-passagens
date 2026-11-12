@@ -90,6 +90,15 @@ begin
       new.folga_regime_faixa := v_contexto.regime_faixa;
       new.folga_intervalo_dias := v_contexto.intervalo_dias;
     else
+      -- Antes da ativacao, preserva a funcao antiga para todas as Folgas.
+      -- Apos a ativacao, BLOQUEIA qualquer Folga nova sem contexto de km,
+      -- inclusive por chamada direta a RPC legada, sem afetar outros motivos.
+      if exists(
+        select 1 from ro_private.folga_configuracao cfg
+        where cfg.chave='novo_fluxo_distancia' and cfg.ativo
+      ) then
+        raise exception 'FOLGA_CAMPO_DISTANCIA_OBRIGATORIA_NOVO_FLUXO';
+      end if;
       -- Caminho legado nao pode falsificar snapshots.
       new.folga_alocacao_id := null;
       new.folga_distancia_km := null;
