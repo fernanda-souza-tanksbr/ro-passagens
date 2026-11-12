@@ -4,6 +4,14 @@
 create role anon nologin;
 create role authenticated nologin;
 create schema if not exists auth;
+create table auth.users(
+ id uuid primary key,
+ deleted_at timestamptz,
+ banned_until timestamptz
+);
+insert into auth.users(id) values
+('00000000-0000-0000-0000-000000000001'),
+('00000000-0000-0000-0000-000000000002');
 create function auth.uid() returns uuid language sql stable as $$
  select nullif(pg_catalog.current_setting('test.uid',true),'')::uuid
 $$;
