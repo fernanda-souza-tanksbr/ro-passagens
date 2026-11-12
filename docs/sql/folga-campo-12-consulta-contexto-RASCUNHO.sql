@@ -24,7 +24,7 @@ begin
   -- Mesmos filtros canonicos de funcionario e CC atualmente aplicados
   -- pelo catalogo e pelo trigger ro_validar_solicitacao_visibilidade.
   -- A helper de funcionarios e SECURITY DEFINER: chamada interna somente.
-  if not public.ro_funcionario_disponivel_para_usuario(auth.uid(),p_funcionario_id) then
+  if public.ro_funcionario_disponivel_para_usuario(auth.uid(),p_funcionario_id) is distinct from true then
     raise exception 'FUNCIONARIO_INDISPONIVEL';
   end if;
   if not exists (
