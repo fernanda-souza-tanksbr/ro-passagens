@@ -1194,11 +1194,16 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
     setConfirmacaoKmFolga(false);
     setKmFolgaErro("");
     setKmFolgaLoading(false);
-    const funcionarioId=funcionarios.find(x=>x.id===form.funcionario_id)?.funcionario_id;
-    if(!NOVO_FLUXO_FOLGA_ATIVO||form.motivo!=="folga_campo"||!funcionarioId||!form.obra_id)return;
+    const selecionado=funcionarios.find(x=>x.id===form.funcionario_id);
+    const funcionarioId=selecionado?.funcionario_id||null;
+    const colaboradorId=selecionado&&selecionado.id!==selecionado.funcionario_id
+      ? selecionado.id : null;
+    if(!NOVO_FLUXO_FOLGA_ATIVO||form.motivo!=="folga_campo"
+      ||(!funcionarioId&&!colaboradorId)||!form.obra_id)return;
     setKmFolgaLoading(true);
     void consultarContextoFolga(funcionarioId,form.obra_id,true,
-      async(args)=>supabase.rpc("ro_consultar_contexto_distancia_folga",args)
+      async(args)=>supabase.rpc("ro_consultar_contexto_distancia_folga",args),
+      colaboradorId
     ).then((contexto)=>{
       if(request!==kmFolgaRequestRef.current)return;
       setContextoKmFolga(contexto);
@@ -1401,12 +1406,17 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
     const payload=normalizarCamposRetorno({...form,aprovador_id:dispensaAprovacao?"":form.aprovador_id,id,colaborador_id:viajanteManual?null:funcionarioSelecionado?.funcionario_id===funcionarioSelecionado?.id?null:funcionarioSelecionado?.id,funcionario_id:viajanteManual?null:funcionarioSelecionado?.funcionario_id||null,viajante_nome_informado:viajanteManual?form.viajante_nome_informado:null,solicitar_excecao_prazo:!operadorRoPodeCadastrarRetroativa&&podeExcepcionarPrazo&&permiteExcecaoPrazo&&solicitarExcecao,usar_destino_excepcional:motivoResidencial&&!!destinoResidencial?.possui_endereco?false:motivoResidencial&&destinoDiferente,destino_residencial_justificativa:motivoResidencial&&destinoDiferente?justificativaDestino:""});
     // O novo fluxo segue explicitamente desligado; quando habilitado,
     // falta de contexto nunca pode recorrer silenciosamente a RPC legada.
-    const funcionarioFolgaId=funcionarioSelecionado?.funcionario_id||"";
+    const funcionarioFolgaId=funcionarioSelecionado?.funcionario_id||null;
+    const colaboradorFolgaId=funcionarioSelecionado
+      && funcionarioSelecionado.id!==funcionarioSelecionado.funcionario_id
+      ? funcionarioSelecionado.id : null;
     const contextoFolga=NOVO_FLUXO_FOLGA_ATIVO && form.motivo==="folga_campo"
       && contextoKmFolga?.funcionario_id===funcionarioFolgaId
+      && contextoKmFolga?.colaborador_id===colaboradorFolgaId
       && contextoKmFolga?.obra_id===form.obra_id
       ? {
-          funcionarioId:funcionarioFolgaId,
+          funcionarioId:funcionarioFolgaId||"",
+          colaboradorId:colaboradorFolgaId,
           obraId:form.obra_id,
           kmSalvo:contextoKmFolga.distancia_km,
           retornoAoCc:contextoKmFolga.retorno_ao_cc,
