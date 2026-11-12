@@ -8,6 +8,7 @@ on:
       - 'docs/implantacao/folga-campo-etapa-a-aditiva-RASCUNHO.sql'
       - 'tests/sql/folgaCampoFixture.sql'
       - 'tests/sql/folgaCampoEtapaAIsolada.sql'
+      - 'docs/implantacao/folga-campo-reversao-etapa-a-RASCUNHO.sql'
       - '.github/workflows/validar-folga-etapa-a-pg17.yml'
   workflow_dispatch:
 
@@ -77,3 +78,11 @@ jobs:
           fi
           grep -q 'FOLGA_SCHEMA_PRIVADO_JA_EXISTENTE' /tmp/folga_segunda_saida.txt
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoEtapaAIsolada.sql
+
+      - name: Simular reversao pontual da Etapa A ainda vazia
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f docs/implantacao/folga-campo-reversao-etapa-a-RASCUNHO.sql
+          test "$(psql -X -v ON_ERROR_STOP=1 -Atc "select count(*) from information_schema.columns where table_schema='public' and table_name='ro_passagem_solicitacoes'")" = "$(cat /tmp/folga_colunas_antes.txt)"
+          test "$(psql -X -v ON_ERROR_STOP=1 -Atc "select to_regnamespace('ro_private') is null and to_regclass('public.ro_folga_alocacoes') is null")" = "t"
+          psql -X -v ON_ERROR_STOP=1 -Atc "select pg_get_functiondef('public.ro_criar_solicitacao_com_aprovador(jsonb,jsonb)'::regprocedure)" > /tmp/folga_rpc_revertida.sql
+          diff -u /tmp/folga_rpc_antes.sql /tmp/folga_rpc_revertida.sql
