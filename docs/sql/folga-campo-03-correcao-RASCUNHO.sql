@@ -32,7 +32,7 @@ as $$
 declare
   v_atual public.ro_folga_alocacoes%rowtype;
   v_user uuid := auth.uid();
-  v_funcionario_id uuid;
+  v_chave text;
 begin
   if v_user is null or not ro_private.pode_corrigir_distancia_folga(v_user) then
     raise exception 'CORRECAO_QUILOMETRAGEM_NAO_AUTORIZADA';
@@ -45,11 +45,11 @@ begin
   end if;
   -- Compartilha o advisory lock da criacao para serializar correcao e
   -- transferencia de CC do mesmo funcionario.
-  select funcionario_id into v_funcionario_id
-  from public.ro_folga_alocacoes where id=p_alocacao_id;
-  if v_funcionario_id is null then raise exception 'ALOCACAO_ATIVA_NAO_ENCONTRADA'; end if;
+  select coalesce(funcionario_id::text,'privado:'||colaborador_id::text)
+  into v_chave from public.ro_folga_alocacoes where id=p_alocacao_id;
+  if v_chave is null then raise exception 'ALOCACAO_ATIVA_NAO_ENCONTRADA'; end if;
   perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended(v_funcionario_id::text,904)
+    pg_catalog.hashtextextended(v_chave,904)
   );
   select * into v_atual
     from public.ro_folga_alocacoes
