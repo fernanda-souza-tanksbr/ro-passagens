@@ -7,7 +7,7 @@ cleanup() { rm -rf "$tmpdir"; }
 trap cleanup EXIT
 
 # Esperar explicitamente que a primeira conexao obtenha o lock.
-# Ambas chamam a RPC integrada com o mesmo funcionario e CCs diferentes.
+# Ambas chamam a RPC integrada para o mesmo funcionario.\n# Com a regra real de duplicidade, a segunda DEVE falhar e sofrer rollback.
 psql -X -v ON_ERROR_STOP=1 > "$tmpdir/primeira.log" 2>&1 <<'SQL' &
 select pg_catalog.set_config('test.uid','00000000-0000-0000-0000-000000000001',false);
 begin;
@@ -68,7 +68,14 @@ pid_segunda=$!
 
 resultado=0
 wait "$pid_primeira" || resultado=1
-wait "$pid_segunda" || resultado=1
+if wait "$pid_segunda"; then
+  echo 'SEGUNDA_CONEXAO_NAO_BLOQUEADA_POR_DUPLICIDADE' >&2
+  resultado=1
+fi
+if ! grep -q 'FOLGA_FUTURA_DUPLICADA:' "$tmpdir/segunda.log"; then
+  echo 'ERRO_DA_SEGUNDA_CONEXAO_NAO_E_DUPLICIDADE' >&2
+  resultado=1
+fi
 if [ "$resultado" -ne 0 ]; then
   echo 'PRIMEIRA CONEXAO'; cat "$tmpdir/primeira.log"
   echo 'SEGUNDA CONEXAO'; cat "$tmpdir/segunda.log"
@@ -92,18 +99,18 @@ begin
       and folga_alocacao_id is not null
       and folga_distancia_km in (200,601);
   select count(*) into v_contextos from ro_private.folga_criacao_contexto;
-  if v_ativos<>1 or v_episodios<>2 or v_pedidos<>2 or v_contextos<>0 then
+  if v_ativos<>1 or v_episodios<>1 or v_pedidos<>1 or v_contextos<>0 then
     raise exception 'CONCORRENCIA_INCONSISTENTE: ativos %, episodios %, pedidos %, contextos %',
       v_ativos,v_episodios,v_pedidos,v_contextos;
   end if;
   if not exists(
     select 1 from public.ro_folga_alocacoes a
     where a.funcionario_id='00000000-0000-0000-0000-000000000102'
-      and a.obra_id='00000000-0000-0000-0000-000000000202'
-      and a.distancia_km=601 and a.encerrada_em is null
+      and a.obra_id='00000000-0000-0000-0000-000000000201'
+      and a.distancia_km=200 and a.encerrada_em is null
   ) then
-    raise exception 'ULTIMO_EPISODIO_ATIVO_INCORRETO';
+    raise exception 'EPISODIO_DA_PRIMEIRA_CRIACAO_NAO_PRESERVADO';
   end if;
 end $$;
-select 'FOLGA_CONCORRENCIA_OK' as resultado;
+select 'FOLGA_CONCORRENCIA_COM_DUPLICIDADE_OK' as resultado;
 SQL
