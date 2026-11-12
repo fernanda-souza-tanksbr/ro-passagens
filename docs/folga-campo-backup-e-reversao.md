@@ -1,40 +1,34 @@
-# Plano de backup, ativacao e reversao — Folga de Campo por distancia
+# Backup, ativacao controlada e reversao — Folga de Campo
 
-**Somente planejamento. Proibida execucao em producao sem autorizacao explicita.**
+**Plano para futura autorizacao. Nenhuma instrucao deste arquivo foi executada na producao.**
 
-## Objetos existentes que precisam de copia verificavel
+## Antes de qualquer alteracao no Supabase compartilhado
 
-- Banco Supabase do projeto Portal TanksBR (`hukhwirdrpylxpaedjbc`), com identificacao da versao de referencia.
-- Definicao completa atual de `public.ro_validar_ciclo_folga_campo()` e `public.ro_auditar_ciclo_folga_campo()`, obtidas de `pg_get_functiondef`.
-- Definicoes e ordem dos gatilhos existentes sobre `public.ro_passagem_solicitacoes`, obtidas de `pg_get_triggerdef`.
-- Confirmacao de backups regulares e snapshot manual testado. Sem alterar Storage ou tabelas de Obras Control.
-- Registro do commit GitHub e deployment Vercel em producao ANTES da alteracao.
+- Identificar commit/deploy de referencia no GitHub e Vercel, conferindo o estado atual da producao.
+- Confirmar backup manual verificavel do PostgreSQL, integridade das solicitacoes e possibilidade de restauracao. Nao modificar Storage ou tabelas oficiais.
+- Exportar com `pg_get_functiondef` os corpos vigentes de `ro_validar_ciclo_folga_campo` e `ro_auditar_ciclo_folga_campo`.
+- Exportar com `pg_get_triggerdef` todos os triggers ligados a `ro_passagem_solicitacoes`, mais grants/RLS existentes e quantidade de Folgas por identidade.
+- Revisar potenciais mudancas de schema desde os testes isolados.
 
-## Duas fases transacionais propostas
+## Implantacao por etapas, somente com aprovacao explicita
 
-**Etapa A**, `docs/implantacao/folga-campo-etapa-a-aditiva-RASCUNHO.sql`:
-cria somente tabelas adicionais, politica inicial de acesso restrito, funcoes privadas e RPC de consulta ainda sem grants. **Nao troca os triggers de solicitacoes existentes.** No ambiente temporario, essa etapa deve manter a criacao antiga inalterada.
+1. **A aditiva:** criar estruturas e RPCs sem grants; `ro_private.folga_configuracao.ativo=false` preserva o fluxo antigo.
+2. **B coordenada:** atualizar as duas funcoes existentes e adicionar protecao de snapshot numa transacao controlada. Gate continua desligado. Conferir todas as operacoes legadas, inclusive privados.
+3. **Ativacao separada:** publicar interface aprovada, conceder EXECUTE somente a authenticated nas RPCs publicas validadas e habilitar a configuracao `novo_fluxo_distancia`. O gatilho passa a rejeitar Folga de Campo por RPC antiga sem km, preservando outros motivos.
+4. Monitorar cadastro, retorno de CC, historico, aprovacoes, notificacoes, compra, correcao autorizada e erros de API.
 
-**Etapa B**, `docs/implantacao/folga-campo-etapa-b-coordenada-RASCUNHO.sql`:
-substitui as duas funcoes ligadas a triggers existentes, inclui guarda de snapshot e wrapper novo sem EXECUTE para clientes. So pode ser considerada depois de backup dos corpos originais e testes de compatibilidade com cadeia real.
+## Reversao imediata, preservando dados
 
-**Ativacao posterior**: conceder permissoes estritamente necessarias, conectar UI a RPC e fazer deploy em etapa separada, apos homologacao. A constante `NOVO_FLUXO_FOLGA_ATIVO` permanece `false` ate entao.
+1. Se houver incidentes, desabilitar `ro_private.folga_configuracao.ativo` e, conforme necessario, voltar o deploy Vercel a versao de referencia.
+2. Revogar grants de EXECUTE das RPCs novas para impedir uso indevido.
+3. Se for preciso reverter a etapa B, restaurar transacionalmente os corpos originais exportados das funcoes, **sem** apagar colunas de snapshot ou tabelas com dados de novos episodios. Avaliar impacto da guarda de snapshots.
+4. Preservar todos os episodios, trilhas de auditoria e solicitacoes criados no intervalo; nunca apagar para simplificar rollback.
+5. Confirmar que o fluxo tradicional, outras solicitacoes, obras e notificacoes continuam intactos.
 
-## Reversao
+## Dependencias pendentes
 
-1. Desabilitar imediatamente o novo fluxo da interface e restaurar a versao de producao de referencia da Vercel, se ele tiver sido ativado.
-2. Em transacao SQL controlada, restaurar o texto exato previamente exportado das duas funcoes existentes, mantendo os triggers com seus nomes. Reverter o guard adicional somente apos confirmar que seu uso nao interfere em solicitacoes ja criadas com snapshot.
-3. Revogar EXECUTE das RPCs novas antes de nova exposicao.
-4. **Nao apagar** as tabelas de distancia nem colunas adicionadas se ja houver solicitacoes ou episodios vinculados: isso destruiria trilha de auditoria e violaria FKs. Preservar dados, sem modificar snapshots historicos.
-5. Conferir criacao tradicional, aprovacoes, notificacoes, antecipacao, bloqueio de compra, folgas duplicadas e integridade de Obras Control.
+A cadeia de aprovacao real, notificacoes e demais triggers foi analisada, mas nao integralmente reproduzida em testes de ponta a ponta. Os grants de ativacao e a publicacao sao passos separados, nao autorizados nesta fase. Corrigir km pelo sistema exige superficie de UI apropriada para operadores habilitados e auditoria.
 
-## Criterios de bloqueio
+Viajantes com nome puramente manual nao foram solicitados para cobertura e nao sao colaboradores privados cadastrados. Estender futuramente exige identidade persistente.
 
-- Sem validacao do fluxo de viajantes privados/manuais, nao habilitar a funcionalidade para esses casos; preservacao do comportamento atual requer decisao explicita.
-- O mock nao representa a cadeia real de documentos, notificacoes e outros triggers; `success` no PostgreSQL descartavel nao equivale a homologacao.
-- A funcionalidade de correcao global exige RPC publica auditada e checagem de atividade do operador; ainda nao foi integrada a UI.
-- Nao aplicar arquivos de `tests/sql` no Supabase real. Nao executar scripts de `docs/implantacao` isoladamente nem sem aprovacao.
-
-## Verificacoes finais
-
-Antes de uma publicacao, verificar se commits, definicoes SQL, grants e dados nao mudaram desde a revisao. Testar em etapas, monitorar erros e documentar o resultado. Nenhum deploy automatico e autorizado por este documento.
+**O novo fluxo continua desativado.**
