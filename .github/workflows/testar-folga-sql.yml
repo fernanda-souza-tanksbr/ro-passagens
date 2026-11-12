@@ -62,3 +62,6 @@ jobs:
 
       - name: Simular concorrencia entre duas transacoes
         run: bash tests/sql/folgaCampoConcorrencia.sh
+
+      - name: Rejeitar permissao indeterminada de funcionario
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoPermissaoNula.sql
