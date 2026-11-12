@@ -45,6 +45,7 @@ import { buildPurchaseCosts, totalTicketValues } from "./purchaseCosts";
 import { buildPurchaseAttachmentInsert } from "./purchaseAttachmentPayload";
 import { supabase } from "./supabase";
 import { planejarRotaCriacao } from "./folgaCampoCompatibilidade";
+import { montarChamadaCriacao } from "./folgaCampoCriacaoRpc";
 import { FolgaCampoQuilometragem } from "./FolgaCampoQuilometragem";
 import { consultarContextoFolga } from "./folgaCampoConsulta";
 import type { ContextoDistanciaServidor } from "./folgaCampoContextoServidor";
@@ -1377,17 +1378,36 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
       documentos.push({categoria,storage_path:uploadedPath,arquivo_nome:documento.name,tamanho_bytes:documento.size});
     }
     const payload=normalizarCamposRetorno({...form,aprovador_id:dispensaAprovacao?"":form.aprovador_id,id,colaborador_id:viajanteManual?null:funcionarioSelecionado?.funcionario_id===funcionarioSelecionado?.id?null:funcionarioSelecionado?.id,funcionario_id:viajanteManual?null:funcionarioSelecionado?.funcionario_id||null,viajante_nome_informado:viajanteManual?form.viajante_nome_informado:null,solicitar_excecao_prazo:!operadorRoPodeCadastrarRetroativa&&podeExcepcionarPrazo&&permiteExcecaoPrazo&&solicitarExcecao,usar_destino_excepcional:motivoResidencial&&!!destinoResidencial?.possui_endereco?false:motivoResidencial&&destinoDiferente,destino_residencial_justificativa:motivoResidencial&&destinoDiferente?justificativaDestino:""});
-    // Mantido DESATIVADO ate backend, migracao e testes transacionais aprovados.
-    // Nao ativar por variavel de ambiente ou configuracao remota nesta fase.
-    const rotaFolga = planejarRotaCriacao(form.motivo, false, null);
+    // O novo fluxo segue explicitamente desligado; quando habilitado,
+    // falta de contexto nunca pode recorrer silenciosamente a RPC legada.
+    const funcionarioFolgaId=funcionarioSelecionado?.funcionario_id||"";
+    const contextoFolga=NOVO_FLUXO_FOLGA_ATIVO && form.motivo==="folga_campo"
+      && contextoKmFolga?.funcionario_id===funcionarioFolgaId
+      && contextoKmFolga?.obra_id===form.obra_id
+      ? {
+          funcionarioId:funcionarioFolgaId,
+          obraId:form.obra_id,
+          kmSalvo:contextoKmFolga.distancia_km,
+          retornoAoCc:contextoKmFolga.retorno_ao_cc,
+          kmInformado:kmFolgaInformado,
+          confirmacaoRetorno:confirmacaoKmFolga,
+          historico:contextoKmFolga.ultima_folga_data_ida
+            ? [{dataIda:contextoKmFolga.ultima_folga_data_ida,status:"finalizada",aprovacaoStatus:"aprovada"}]
+            : [],
+          dataIda:form.data_ida
+        }
+      : null;
+    const rotaFolga=planejarRotaCriacao(form.motivo,NOVO_FLUXO_FOLGA_ATIVO,contextoFolga);
     if (!rotaFolga.ok) {
       if (uploadedPath) await supabase.storage.from("ro-documentos-internos").remove([uploadedPath]);
-      setErro("Não foi possível validar o contexto da Folga de Campo.");
+      setErro("Confira a quilometragem, a confirmação de retorno e o centro de custo antes de criar a Folga de Campo.");
       setBusy(false);
       return;
     }
-    // A unica rota alcancavel nesta fase e a RPC existente.
-    const { data: created, error } = await supabase.rpc("ro_criar_solicitacao_com_aprovador", { p_solicitacao:payload, p_documentos:documentos });
+    const chamadaFolga=montarChamadaCriacao(rotaFolga,payload,documentos);
+    const { data: created, error }=chamadaFolga.rpc==="ro_criar_folga_campo_com_distancia"
+      ? await supabase.rpc("ro_criar_folga_campo_com_distancia",chamadaFolga.args)
+      : await supabase.rpc("ro_criar_solicitacao_com_aprovador",chamadaFolga.args);
     if (error) {
       if(uploadedPath) await supabase.storage.from("ro-documentos-internos").remove([uploadedPath]);
       if (import.meta.env.DEV) console.error("Falha ao criar solicitação", { message:error.message, code:error.code, details:error.details, hint:error.hint });
