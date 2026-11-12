@@ -58,6 +58,7 @@ begin
        or new.folga_regime_faixa is distinct from old.folga_regime_faixa
        or new.folga_intervalo_dias is distinct from old.folga_intervalo_dias
        or new.funcionario_id is distinct from old.funcionario_id
+       or new.colaborador_id is distinct from old.colaborador_id
        or new.obra_id is distinct from old.obra_id
        or new.motivo is distinct from old.motivo then
       raise exception 'SNAPSHOT_FOLGA_IMUTAVEL';
