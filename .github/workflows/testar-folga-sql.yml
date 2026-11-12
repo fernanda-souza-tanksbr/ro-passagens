@@ -25,7 +25,7 @@ jobs:
     timeout-minutes: 15
     services:
       postgres:
-        image: postgres:16
+        image: postgres:17
         env:
           POSTGRES_PASSWORD: teste_descartavel
           POSTGRES_DB: folga_teste
@@ -50,8 +50,11 @@ jobs:
       - name: Preparar banco e instalar etapas A e B
         run: |
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoFixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoLegadoRealFixture.sql
           psql -X -v ON_ERROR_STOP=1 -f docs/implantacao/folga-campo-etapa-a-aditiva-RASCUNHO.sql
-          psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoTriggersLegados.sql
+          psql -X -v ON_ERROR_STOP=1 -c "drop function public.ro_funcionario_possui_folga_futura_ativa(uuid,uuid)"
+          psql -X -v ON_ERROR_STOP=1 -c "drop function public.ro_obter_ciclo_folga_funcionario(uuid)"
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoLegadoRealCaptura.sql
           psql -X -v ON_ERROR_STOP=1 -f docs/implantacao/folga-campo-etapa-b-coordenada-RASCUNHO.sql
 
       - name: Conferir grants e RLS no pacote isolado
