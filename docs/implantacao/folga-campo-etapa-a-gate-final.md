@@ -57,6 +57,6 @@
 ## Reversão
 
 - Se A falhar **durante** a transação: PostgreSQL desfaz automaticamente a alteração.
-- Se A for concluída e **B ainda não executada**, confirmar que tabelas A estão vazias e que nenhuma das quatro colunas tem valores. Executar a reversão pontual em transação, **somente com autorização explícita**; ela verifica ausência de B e de dados antes de remover colunas, funções, tabelas e schema novos.
+- Se A for concluída e **B ainda não executada**, confirmar que tabelas A estão vazias e que nenhuma das quatro colunas tem valores. Executar a reversão pontual em transação, **somente com autorização explícita**; ela verifica ausência de B e de dados antes de remover colunas, funções, tabelas e schema novos. Registrar essa reversão como **nova migration Supabase** com nome distinto (ex.: `folga_campo_reversao_etapa_a`) por `apply_migration`, sem apagar ou editar a migration original aplicada. Espelhar a versão gerada no GitHub após execução, mantendo rastreabilidade.
 - Em caso de qualquer dependência nova, dados preenchidos ou B já presente: **não usar** a reversão A; analisar opção específica sem destruir histórico.
 - Backup físico Supabase é última alternativa, pois a restauração integral pode reverter solicitações/obras mais recentes e não inclui objetos do Storage.
