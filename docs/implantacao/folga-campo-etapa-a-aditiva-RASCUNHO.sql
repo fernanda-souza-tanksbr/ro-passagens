@@ -9,6 +9,12 @@ begin
     or to_regclass('public.ro_funcionarios_enderecos_privados') is null
     or to_regprocedure('public.ro_criar_solicitacao_com_aprovador(jsonb,jsonb)') is null
   then raise exception 'PREFLIGHT_RO_PASSAGENS_INCOMPATIVEL'; end if;
+  -- Nao prosseguir sobre instalacao parcial ou esquema divergente.
+  if to_regclass('public.ro_folga_alocacoes') is not null
+    or to_regclass('public.ro_folga_distancia_auditoria') is not null
+    or to_regclass('ro_private.folga_criacao_contexto') is not null
+    or to_regclass('ro_private.folga_configuracao') is not null
+  then raise exception 'FOLGA_DISTANCIA_JA_PARCIALMENTE_INSTALADA'; end if;
 end
 $guard$;
 
