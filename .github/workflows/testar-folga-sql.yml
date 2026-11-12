@@ -68,3 +68,6 @@ jobs:
 
       - name: Rejeitar permissao indeterminada de funcionario
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoPermissaoNula.sql
+
+      - name: Validar colaboradores privados com e sem vinculo
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoPrivados.sql
