@@ -9,17 +9,17 @@ alter table public.ro_passagem_solicitacoes
 
 -- Copia estrutural do predicado vigente no Supabase em 11/11/2026.
 create or replace function public.ro_funcionario_possui_folga_futura_ativa(
-  p_funcionario_id uuid,
-  p_ignorar_solicitacao_id uuid default null
+  p_func uuid,
+  p_excluir uuid default null
 ) returns uuid
 language sql stable security definer
 set search_path to 'public', 'pg_temp'
 as $$
   select s.id
   from public.ro_passagem_solicitacoes s
-  where s.funcionario_id=p_funcionario_id
+  where s.funcionario_id=p_func
     and s.motivo='folga_campo'
-    and s.id is distinct from p_ignorar_solicitacao_id
+    and s.id is distinct from p_excluir
     and s.excluida_em is null
     and s.data_ida >= (now() at time zone 'America/Sao_Paulo')::date
     and s.status in ('solicitada','em_andamento','passagem_comprada')
