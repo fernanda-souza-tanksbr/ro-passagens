@@ -6,7 +6,9 @@ create schema if not exists ro_private;
 
 create table if not exists ro_private.folga_criacao_contexto (
   solicitacao_id uuid primary key,
-  funcionario_id uuid not null references public.funcionarios(id),
+  funcionario_id uuid references public.funcionarios(id),
+  colaborador_id uuid references public.ro_funcionarios_enderecos_privados(id),
+  constraint ro_folga_contexto_identidade check (num_nonnulls(funcionario_id,colaborador_id)=1),
   obra_id uuid not null references public.obras(id),
   alocacao_id uuid not null references public.ro_folga_alocacoes(id),
   distancia_km integer not null check (distancia_km >= 0),
@@ -32,7 +34,7 @@ revoke all on schema ro_private from anon, authenticated;
 --
 -- Padrao para o BEFORE INSERT trigger coordenado:
 -- SELECT * FROM ro_private.folga_criacao_contexto
--- WHERE solicitacao_id=NEW.id AND funcionario_id=NEW.funcionario_id
+-- WHERE solicitacao_id=NEW.id AND (funcionario_id=NEW.funcionario_id OR colaborador_id=NEW.colaborador_id)
 -- AND obra_id=NEW.obra_id AND criado_por=auth.uid();
 -- Se encontrou, aplicar snapshot ANTES da insercao e calcular ciclo novo.
 -- Se nao encontrou, manter caminho legado sem exigir km.
