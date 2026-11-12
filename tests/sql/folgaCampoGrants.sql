@@ -7,8 +7,8 @@ begin
      or pg_catalog.has_function_privilege('authenticated','public.ro_criar_folga_campo_com_distancia(jsonb,jsonb,integer,boolean)','EXECUTE')
   then raise exception 'CRIACAO_KM_EXPOSTA_ANTES_DA_ATIVACAO'; end if;
 
-  if pg_catalog.has_function_privilege('anon','public.ro_consultar_contexto_distancia_folga(uuid,uuid)','EXECUTE')
-     or pg_catalog.has_function_privilege('authenticated','public.ro_consultar_contexto_distancia_folga(uuid,uuid)','EXECUTE')
+  if pg_catalog.has_function_privilege('anon','public.ro_consultar_contexto_distancia_folga(uuid,uuid,uuid)','EXECUTE')
+     or pg_catalog.has_function_privilege('authenticated','public.ro_consultar_contexto_distancia_folga(uuid,uuid,uuid)','EXECUTE')
   then raise exception 'CONSULTA_KM_EXPOSTA_ANTES_DA_ATIVACAO'; end if;
 
   if pg_catalog.has_function_privilege('anon','public.ro_corrigir_distancia_folga(uuid,integer,text)','EXECUTE')
