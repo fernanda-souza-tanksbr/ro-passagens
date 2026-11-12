@@ -1,8 +1,21 @@
 -- RASCUNHO ETAPA B - NAO EXECUTAR NA PRODUCAO.
 -- Troca coordenada, gate permanece desativado, sem GRANTS.
 begin;
+set local lock_timeout = '5s';
+set local statement_timeout = '120s';
 do $guard$
 begin
+  -- Nao executar se a definicao legada de producao divergir do baseline auditado.
+  if md5(pg_catalog.pg_get_functiondef('public.ro_validar_ciclo_folga_campo()'::regprocedure)) <> '49a68dd1572810e5a18a996cd901df9e'
+     or md5(pg_catalog.pg_get_functiondef('public.ro_auditar_ciclo_folga_campo()'::regprocedure)) <> '589eb30a46581641c8bedf80e3d5e50e'
+  then raise exception 'ETAPA_B_FUNCOES_LEGADAS_ALTERADAS'; end if;
+  if to_regprocedure('public.ro_criar_folga_campo_com_distancia(jsonb,jsonb,integer,boolean)') is not null
+     or to_regprocedure('public.ro_guardar_snapshot_folga()') is not null
+     or exists (select 1 from pg_catalog.pg_trigger where tgrelid='public.ro_passagem_solicitacoes'::regclass
+       and tgname='ro_guardar_snapshot_folga' and not tgisinternal)
+  then raise exception 'ETAPA_B_JA_EXISTE_PARCIALMENTE'; end if;
+  if (select ativo from ro_private.folga_configuracao where chave='novo_fluxo_distancia') is distinct from false
+  then raise exception 'ETAPA_B_GATE_DEVE_ESTAR_DESATIVADO'; end if;
   if to_regclass('public.ro_folga_alocacoes') is null
     or to_regclass('ro_private.folga_criacao_contexto') is null
     or to_regclass('ro_private.folga_configuracao') is null
