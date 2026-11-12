@@ -7,7 +7,8 @@ create or replace function ro_private.preparar_episodio_folga(
   p_funcionario_id uuid,
   p_obra_id uuid,
   p_distancia_declarada_km integer,
-  p_confirma_retorno boolean
+  p_confirma_retorno boolean,
+  p_colaborador_id uuid default null
 ) returns jsonb
 language plpgsql
 security definer
@@ -24,17 +25,19 @@ declare
   v_acao text;
 begin
   if auth.uid() is null then raise exception 'AUTENTICACAO_OBRIGATORIA'; end if;
-  if p_funcionario_id is null or p_obra_id is null then
-    raise exception 'FUNCIONARIO_CC_OBRIGATORIOS';
+  if pg_catalog.num_nonnulls(p_funcionario_id,p_colaborador_id)<>1
+     or p_obra_id is null then
+    raise exception 'IDENTIDADE_CC_OBRIGATORIOS';
   end if;
   -- A RPC chamadora deve confirmar autorizacao para criar em nome do funcionario.
   -- Este lock deve ser compartilhado com a validacao de ciclo.
   perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended(p_funcionario_id::text, 904)
+    pg_catalog.hashtextextended(coalesce(p_funcionario_id::text,'privado:'||p_colaborador_id::text), 904)
   );
   select * into v_atual
   from public.ro_folga_alocacoes
-  where funcionario_id=p_funcionario_id and encerrada_em is null
+  where funcionario_id is not distinct from p_funcionario_id
+    and colaborador_id is not distinct from p_colaborador_id and encerrada_em is null
   for update;
 
   if v_atual.id is not null and v_atual.obra_id=p_obra_id then
@@ -48,7 +51,8 @@ begin
   else
     select * into v_anterior
     from public.ro_folga_alocacoes
-    where funcionario_id=p_funcionario_id and obra_id=p_obra_id
+    where funcionario_id is not distinct from p_funcionario_id
+      and colaborador_id is not distinct from p_colaborador_id and obra_id=p_obra_id
     order by iniciada_em desc,id desc limit 1;
 
     if v_anterior.id is not null then
@@ -75,9 +79,9 @@ begin
       where id=v_atual.id;
     end if;
     insert into public.ro_folga_alocacoes(
-      funcionario_id,obra_id,distancia_km,confirmada_em,confirmada_por,origem_alocacao_id
+      funcionario_id,colaborador_id,obra_id,distancia_km,confirmada_em,confirmada_por,origem_alocacao_id
     ) values (
-      p_funcionario_id,p_obra_id,v_km,pg_catalog.now(),auth.uid(),v_anterior.id
+      p_funcionario_id,p_colaborador_id,p_obra_id,v_km,pg_catalog.now(),auth.uid(),v_anterior.id
     ) returning id into v_novo_id;
     insert into public.ro_folga_distancia_auditoria(
       alocacao_id,distancia_anterior_km,distancia_nova_km,
@@ -93,12 +97,13 @@ begin
 
   return pg_catalog.jsonb_build_object(
     'alocacao_id',v_novo_id,'obra_id',p_obra_id,
+    'funcionario_id',p_funcionario_id,'colaborador_id',p_colaborador_id,
     'distancia_km',v_km,'regime_faixa',v_faixa,
     'intervalo_dias',v_intervalo,'transporte',v_transporte
   );
 end;
 $$;
-revoke all on function ro_private.preparar_episodio_folga(uuid,uuid,integer,boolean)
+revoke all on function ro_private.preparar_episodio_folga(uuid,uuid,integer,boolean,uuid)
   from public,anon,authenticated;
 
 -- INTEGRACAO AINDA NAO PRONTA:
