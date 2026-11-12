@@ -2,6 +2,7 @@ import { calcularCicloFolga, estadoQuilometragem, regimePorDistancia, type Folga
 
 export type ContextoFolgaCampo = {
   funcionarioId: string;
+  colaboradorId?: string | null;
   obraId: string;
   kmSalvo: number | null;
   retornoAoCc: boolean;
@@ -15,7 +16,7 @@ export type PreparacaoFolgaCampo =
   | { ok: true; km: number; faixa: string; intervaloDias: number; transporte: string; proximaPrevista: string | null; antecipada: boolean; exigeDeclaracao: boolean };
 
 export function prepararFolgaCampo(c: ContextoFolgaCampo): PreparacaoFolgaCampo {
-  if (!c.funcionarioId || !c.obraId) return { ok: false, motivo: "FUNCIONARIO_OU_CC_OBRIGATORIO" };
+  if ((!c.funcionarioId && !c.colaboradorId) || !c.obraId) return { ok: false, motivo: "FUNCIONARIO_OU_CC_OBRIGATORIO" };
   let estado: ReturnType<typeof estadoQuilometragem>;
   try { estado = estadoQuilometragem(c.kmSalvo, c.retornoAoCc); }
   catch { return { ok: false, motivo: "DISTANCIA_INVALIDA" }; }
