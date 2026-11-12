@@ -5,7 +5,9 @@ begin;
 
 create table if not exists public.ro_folga_alocacoes (
   id uuid primary key default gen_random_uuid(),
-  funcionario_id uuid not null references public.funcionarios(id),
+  funcionario_id uuid references public.funcionarios(id),
+  colaborador_id uuid references public.ro_funcionarios_enderecos_privados(id),
+  constraint ro_folga_alocacoes_identidade check (num_nonnulls(funcionario_id,colaborador_id)=1),
   obra_id uuid not null references public.obras(id),
   iniciada_em timestamptz not null default now(),
   encerrada_em timestamptz,
@@ -18,9 +20,14 @@ create table if not exists public.ro_folga_alocacoes (
 );
 create unique index if not exists ro_folga_alocacao_ativa_unica
   on public.ro_folga_alocacoes(funcionario_id)
-  where encerrada_em is null;
+  where encerrada_em is null and funcionario_id is not null;
+create unique index if not exists ro_folga_alocacao_privada_ativa_unica
+  on public.ro_folga_alocacoes(colaborador_id)
+  where encerrada_em is null and colaborador_id is not null;
 create index if not exists ro_folga_alocacoes_funcionario_obra
   on public.ro_folga_alocacoes(funcionario_id,obra_id,iniciada_em desc);
+create index if not exists ro_folga_alocacoes_colaborador_obra
+  on public.ro_folga_alocacoes(colaborador_id,obra_id,iniciada_em desc);
 alter table public.ro_folga_alocacoes enable row level security;
 revoke all on public.ro_folga_alocacoes from anon,authenticated;
 
