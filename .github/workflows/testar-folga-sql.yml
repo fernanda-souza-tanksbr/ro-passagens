@@ -6,6 +6,7 @@ on:
       - feat/folga-campo-regimes-distancia
     paths:
       - 'docs/sql/folga-campo-*.sql'
+      - 'docs/implantacao/folga-campo-*.sql'
       - 'tests/sql/folgaCampo*.sql'
       - 'tests/sql/folgaCampo*.sh'
       - '.github/workflows/testar-folga-sql.yml'
@@ -46,10 +47,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Preparar fixture e instalar pacote integrado atomico
+      - name: Preparar banco e instalar etapas A e B
         run: |
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoFixture.sql
-          psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoPacoteIntegrado.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/implantacao/folga-campo-etapa-a-aditiva-RASCUNHO.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoTriggersLegados.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/implantacao/folga-campo-etapa-b-coordenada-RASCUNHO.sql
 
       - name: Conferir grants e RLS no pacote isolado
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoGrants.sql
