@@ -9,6 +9,11 @@ create function auth.uid() returns uuid language sql stable as $$
 $$;
 create table public.funcionarios(id uuid primary key, ativo boolean not null default true);
 create table public.obras(id uuid primary key, nome text not null, visivel_passagens boolean not null default true);
+create table public.ro_funcionarios_enderecos_privados (
+ id uuid primary key,
+ funcionario_id uuid references public.funcionarios(id),
+ ativo boolean not null default true
+);
 create table public.user_roles(user_id uuid not null, role text not null);
 create table public.ro_responsaveis(user_id uuid not null, ativo boolean not null default true);
 create function public.ro_is_operador_ativo(p_user uuid)
@@ -18,6 +23,7 @@ $$;
 create table public.ro_passagem_solicitacoes(
  id uuid primary key default gen_random_uuid(),
  funcionario_id uuid references public.funcionarios(id),
+ colaborador_id uuid references public.ro_funcionarios_enderecos_privados(id),
  obra_id uuid references public.obras(id),
  motivo text not null,
  data_ida date not null,
@@ -59,11 +65,12 @@ create function public.ro_criar_solicitacao_com_aprovador(
 declare v_id uuid;
 begin
  insert into public.ro_passagem_solicitacoes(
-  id,funcionario_id,obra_id,motivo,data_ida,status,aprovacao_status,
+  id,funcionario_id,colaborador_id,obra_id,motivo,data_ida,status,aprovacao_status,
   folga_antecipacao_justificativa
  ) values (
   (p_solicitacao->>'id')::uuid,
   (p_solicitacao->>'funcionario_id')::uuid,
+  nullif(p_solicitacao->>'colaborador_id','')::uuid,
   (p_solicitacao->>'obra_id')::uuid,
   p_solicitacao->>'motivo',
   (p_solicitacao->>'data_ida')::date,
@@ -79,6 +86,10 @@ $$;
 insert into public.funcionarios(id) values
 ('00000000-0000-0000-0000-000000000101'),
 ('00000000-0000-0000-0000-000000000102');
+insert into public.ro_funcionarios_enderecos_privados(id,funcionario_id,ativo) values
+('00000000-0000-0000-0000-000000000701',null,true),
+('00000000-0000-0000-0000-000000000702','00000000-0000-0000-0000-000000000102',true),
+('00000000-0000-0000-0000-000000000703',null,false);
 insert into public.obras(id,nome) values
 ('00000000-0000-0000-0000-000000000201','CC A'),
 ('00000000-0000-0000-0000-000000000202','CC B'),
