@@ -69,11 +69,14 @@ begin
 
  -- Mesmo limite transacional: insere primeiro, aprova depois.
  insert into public.ro_passagem_solicitacoes (
-  id,funcionario_id,obra_id,motivo,data_ida,status,
+  id,funcionario_id,colaborador_id,obra_id,motivo,data_ida,status,
   aprovacao_status,folga_antecipacao_justificativa
  ) values (
   (p_solicitacao->>'id')::uuid,
-  (p_solicitacao->>'funcionario_id')::uuid,
+  coalesce(nullif(p_solicitacao->>'funcionario_id','')::uuid,
+    (select e.funcionario_id from public.ro_funcionarios_enderecos_privados e
+     where e.id=nullif(p_solicitacao->>'colaborador_id','')::uuid and e.ativo)),
+  nullif(p_solicitacao->>'colaborador_id','')::uuid,
   (p_solicitacao->>'obra_id')::uuid,
   p_solicitacao->>'motivo',(p_solicitacao->>'data_ida')::date,
   'solicitada','pendente',p_solicitacao->>'folga_antecipacao_justificativa'
