@@ -74,3 +74,11 @@ jobs:
 
       - name: Testar bloqueio da RPC legada apos ativacao e rollback da flag
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoAtivacao.sql
+
+      - name: Exercitar C1 C2 e reversao de permissoes no banco ficticio
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f docs/implantacao/folga-campo-etapa-c1-permissoes-RASCUNHO.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/implantacao/folga-campo-etapa-c2-ativar-RASCUNHO.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoOperacaoPermissoes.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/implantacao/folga-campo-reversao-ativacao-RASCUNHO.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoGrants.sql
