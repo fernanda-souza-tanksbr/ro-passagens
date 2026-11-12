@@ -50,6 +50,19 @@ alter table public.ro_passagem_solicitacoes
   add column if not exists folga_regime_faixa text,
   add column if not exists folga_intervalo_dias integer check (folga_intervalo_dias in (7,14,45,90));
 
+-- Controle privado de ativacao: false preserva o fluxo antigo ate a
+-- publicacao coordenada. Nunca alterar diretamente pelo cliente.
+create table if not exists ro_private.folga_configuracao (
+  chave text primary key check(chave='novo_fluxo_distancia'),
+  ativo boolean not null default false,
+  atualizado_em timestamptz not null default now()
+);
+insert into ro_private.folga_configuracao(chave,ativo)
+values('novo_fluxo_distancia',false)
+on conflict (chave) do nothing;
+alter table ro_private.folga_configuracao enable row level security;
+revoke all on ro_private.folga_configuracao from public,anon,authenticated;
+
 -- Funcao pura e privada: sem leitura de dados e sem SECURITY DEFINER.
 -- Nao conceder EXECUTE a clientes; o servidor devera chama-la na futura RPC.
 create schema if not exists ro_private;
