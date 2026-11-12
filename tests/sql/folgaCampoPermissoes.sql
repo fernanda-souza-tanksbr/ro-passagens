@@ -87,7 +87,7 @@ begin
 end $$;
 
 -- Coordenador com conta Auth bloqueada ou excluida nao pode corrigir.
-DO $
+DO $$
 declare v_id uuid;v_km integer;v_err text;v_audit int;
 begin
  select id,distancia_km into strict v_id,v_km
@@ -123,6 +123,6 @@ begin
     or (select count(*) from public.ro_folga_distancia_auditoria)<>v_audit
  then raise exception 'USUARIO_BLOQUEADO_ALTEROU_DISTANCIA_OU_AUDITORIA';
  end if;
-end $;
+end $$;
 
 select 'FOLGA_SQL_PERMISSOES_OK' as resultado;
