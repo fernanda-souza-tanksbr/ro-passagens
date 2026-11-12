@@ -7,7 +7,7 @@ const criacao = readFileSync("docs/sql/folga-campo-09-rpc-criacao-coordenada-RAS
 const estruturas = readFileSync("docs/sql/folga-campo-01-estruturas-RASCUNHO.sql","utf8");
 
 test("consulta exige usuario e valida funcionario antes de ler distancia e historico",()=>{
-  assert.match(consulta,/auth\.uid\(\) is null[\s\S]*FUNCIONARIO_CC_OBRIGATORIOS/);
+  assert.match(consulta,/auth\.uid\(\) is null[\s\S]*IDENTIDADE_CC_OBRIGATORIOS/);
   const autorizacao = consulta.indexOf("ro_funcionario_disponivel_para_usuario(");
   const primeiraLeitura = consulta.indexOf("select * into v_atual from public.ro_folga_alocacoes");
   assert.ok(autorizacao>=0 && autorizacao<primeiraLeitura);
@@ -21,7 +21,7 @@ test("consulta e criacao aplicam a mesma visibilidade de CC do catalogo oficial"
 });
 
 test("consulta nao abre EXECUTE a anon ou authenticated",()=>{
-  assert.match(consulta,/revoke all on function public\.ro_consultar_contexto_distancia_folga\(uuid,uuid\)[\s\S]*from public,anon,authenticated/);
+  assert.match(consulta,/revoke all on function public\.ro_consultar_contexto_distancia_folga\(uuid,uuid,uuid\)[\s\S]*from public,anon,authenticated/);
   assert.doesNotMatch(consulta,/grant\s+execute\s+on\s+function/i);
 });
 
