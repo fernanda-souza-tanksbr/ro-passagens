@@ -46,6 +46,7 @@ import { buildPurchaseAttachmentInsert } from "./purchaseAttachmentPayload";
 import { supabase } from "./supabase";
 import { planejarRotaCriacao } from "./folgaCampoCompatibilidade";
 import { montarChamadaCriacao } from "./folgaCampoCriacaoRpc";
+import { adicionarDiasIso, regimePorDistancia } from "./folgaCampoRegimes";
 import { FolgaCampoQuilometragem } from "./FolgaCampoQuilometragem";
 import { consultarContextoFolga } from "./folgaCampoConsulta";
 import type { ContextoDistanciaServidor } from "./folgaCampoContextoServidor";
@@ -1181,7 +1182,7 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
     setCicloFolga(null);
     setForm((atual)=>atual.motivo==="folga_campo"?atual:{...atual,folga_antecipacao_justificativa:""});
     const obrasId=funcionarios.find(x=>x.id===form.funcionario_id)?.funcionario_id;
-    if(form.motivo!=="folga_campo"||!obrasId)return;
+    if(NOVO_FLUXO_FOLGA_ATIVO||form.motivo!=="folga_campo"||!obrasId)return;
     setCicloLoading(true);
     supabase.rpc("ro_obter_ciclo_folga_funcionario",{p_funcionario_id:obrasId}).then(({data,error})=>{setCicloFolga(error?null:data as CicloFolga);if(error)setErro("Não foi possível consultar o ciclo de folga de campo.");setCicloLoading(false);});
   },[form.funcionario_id,form.motivo,funcionarios]);
@@ -1246,7 +1247,18 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
   }, [form.funcionario_id, funcionarios, privateReady]);
   const foraPrazo =
     Boolean(form.data_ida) && form.data_ida < idaMinima;
-  const folgaAntecipada=form.motivo==="folga_campo"&&dataAntecipaCiclo(form.data_ida,cicloFolga?.proxima_folga_prevista);
+  const proximaFolgaPorDistancia=(()=>{
+    if(!NOVO_FLUXO_FOLGA_ATIVO||!contextoKmFolga?.ultima_folga_data_ida)return null;
+    const km=contextoKmFolga.distancia_km
+      ?? (/^\\d+$/.test(kmFolgaInformado.trim())?Number(kmFolgaInformado.trim()):null);
+    if(km===null||!Number.isSafeInteger(km))return null;
+    try { return adicionarDiasIso(contextoKmFolga.ultima_folga_data_ida,regimePorDistancia(km).intervaloDias); }
+    catch { return null; }
+  })();
+  const folgaAntecipada=form.motivo==="folga_campo"&&dataAntecipaCiclo(
+    form.data_ida,
+    NOVO_FLUXO_FOLGA_ATIVO ? proximaFolgaPorDistancia : cicloFolga?.proxima_folga_prevista
+  );
   useEffect(() => {
     if (permiteExcecaoPrazo) return;
     setSolicitarExcecao(false);
@@ -1357,7 +1369,16 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
       return;
     }
     if (form.data_retorno && form.data_retorno < form.data_ida) { setErro("A data de retorno não pode ser anterior à data de ida."); return; }
-    if(form.motivo==="folga_campo"&&folgaFuturaBloqueia(cicloFolga)){setErro(`Já existe uma solicitação de folga de campo para este funcionário em ${data(cicloFolga?.solicitacao_futura_data)}.`);return;}
+    if(form.motivo==="folga_campo"&&(
+      NOVO_FLUXO_FOLGA_ATIVO
+        ? Boolean(contextoKmFolga?.solicitacao_futura_existente_id)
+        : folgaFuturaBloqueia(cicloFolga)
+    )){
+      setErro(NOVO_FLUXO_FOLGA_ATIVO
+        ? "Já existe uma Folga de Campo futura ativa para este funcionário."
+        : `Já existe uma solicitação de folga de campo para este funcionário em ${data(cicloFolga?.solicitacao_futura_data)}.`);
+      return;
+    }
     if(folgaAntecipada&&!justificativaAntecipacaoValida(form.folga_antecipacao_justificativa)){setErro("A justificativa da antecipação deve ter pelo menos 10 caracteres úteis.");return;}
     if (!operadorRoPodeCadastrarRetroativa && foraPrazo && podeExcepcionarPrazo && solicitarExcecao && !detailedJustificationIsValid(form.justificativa_excecao_prazo)) {
       setErro("Informe uma justificativa mais detalhada, com pelo menos 20 caracteres.");
@@ -1544,7 +1565,22 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
           <label>Ida a partir do horário<input type="time" value={form.ida_a_partir_horario} onChange={(e)=>setForm({...form,ida_a_partir_horario:e.target.value})}/></label>
         </section>
         {mensagemAntecedencia(form.motivo || null, form.desligamento_subtipo || null, access.isRh) && <div className="alert wide">{mensagemAntecedencia(form.motivo || null, form.desligamento_subtipo || null, access.isRh)}</div>}
-        {form.motivo==="folga_campo"&&form.funcionario_id&&<section className="alert wide cycle-info">{cicloLoading?<span>Consultando ciclo...</span>:cicloFolga?.possui_historico?<><strong>Última folga de campo: {data(cicloFolga.ultima_folga_realizada)}</strong><span>Próxima folga prevista: {data(cicloFolga.proxima_folga_prevista)}</span><span>Data recomendada para solicitar: {data(cicloFolga.data_limite_recomendada)}</span></>:<span>{SEM_HISTORICO_FOLGA}</span>}{cicloFolga?.solicitacao_futura_existente_id&&<strong>Já existe uma solicitação de folga de campo para este funcionário em {data(cicloFolga.solicitacao_futura_data)}. Status: {estadoEfetivoFolga(cicloFolga)||statusLabel[cicloFolga.solicitacao_futura_status as Status]||cicloFolga.solicitacao_futura_status}.</strong>}</section>}
+        {form.motivo==="folga_campo"&&form.funcionario_id&&(
+          NOVO_FLUXO_FOLGA_ATIVO
+            ? <section className="alert wide cycle-info">
+                {kmFolgaLoading?<span>Consultando ciclo por distância...</span>
+                  : kmFolgaErro?<span role="alert">{kmFolgaErro}</span>
+                  : !contextoKmFolga?<span>Selecione funcionário e centro de custo para consultar o ciclo.</span>
+                  : <>
+                      {contextoKmFolga.ultima_folga_data_ida
+                        ? <><strong>Última folga de campo: {data(contextoKmFolga.ultima_folga_data_ida)}</strong>
+                            <span>Próxima folga prevista: {proximaFolgaPorDistancia?data(proximaFolgaPorDistancia):"Informe a distância para calcular."}</span></>
+                        : <span>{SEM_HISTORICO_FOLGA}</span>}
+                      {contextoKmFolga.solicitacao_futura_existente_id&&<strong>Já existe uma Folga de Campo futura ativa para este funcionário.</strong>}
+                    </>}
+              </section>
+            : <section className="alert wide cycle-info">{cicloLoading?<span>Consultando ciclo...</span>:cicloFolga?.possui_historico?<><strong>Última folga de campo: {data(cicloFolga.ultima_folga_realizada)}</strong><span>Próxima folga prevista: {data(cicloFolga.proxima_folga_prevista)}</span><span>Data recomendada para solicitar: {data(cicloFolga.data_limite_recomendada)}</span></>:<span>{SEM_HISTORICO_FOLGA}</span>}{cicloFolga?.solicitacao_futura_existente_id&&<strong>Já existe uma solicitação de folga de campo para este funcionário em {data(cicloFolga.solicitacao_futura_data)}. Status: {estadoEfetivoFolga(cicloFolga)||statusLabel[cicloFolga.solicitacao_futura_status as Status]||cicloFolga.solicitacao_futura_status}.</strong>}</section>
+        )}
         <label>
           Data de ida *
           <input
