@@ -292,13 +292,20 @@ returns boolean
 language sql stable security definer
 set search_path = ''
 as $$
-  select p_user is not null and (
-    exists (
-      select 1 from public.user_roles ur
-      where ur.user_id = p_user and ur.role::text in ('coordenador','gerente')
+  select p_user is not null
+    and exists (
+      select 1 from auth.users u
+      where u.id=p_user
+        and u.deleted_at is null
+        and (u.banned_until is null or u.banned_until<=pg_catalog.now())
     )
-    or public.ro_is_operador_ativo(p_user)
-  );
+    and (
+      exists (
+        select 1 from public.user_roles ur
+        where ur.user_id=p_user and ur.role::text in ('coordenador','gerente')
+      )
+      or public.ro_is_operador_ativo(p_user)
+    );
 $$;
 revoke all on function ro_private.pode_corrigir_distancia_folga(uuid) from public,anon,authenticated;
 
@@ -374,8 +381,6 @@ revoke all on function ro_private.corrigir_distancia_folga(uuid,integer,text) fr
 --    sem reescrever cadeia de aprovacao; garantir lock por funcionario.
 -- 4. Proteger snapshots de alteracao direta e testar permissao com JWT real.
 -- 5. Testar falha transacional e concorrencia. Nao executar este arquivo isoladamente.
-
-
 
 -- ===== ORIGEM: docs/sql/folga-campo-12-consulta-contexto-RASCUNHO.sql =====
 -- RASCUNHO 12 - CONSULTA SEGURA DE CONTEXTO DE FOLGA
