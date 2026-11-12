@@ -1,0 +1,79 @@
+name: Folga de Campo - homologacao Etapa A PostgreSQL 17
+
+on:
+  push:
+    branches:
+      - feat/folga-campo-regimes-distancia
+    paths:
+      - 'docs/implantacao/folga-campo-etapa-a-aditiva-RASCUNHO.sql'
+      - 'tests/sql/folgaCampoFixture.sql'
+      - 'tests/sql/folgaCampoEtapaAIsolada.sql'
+      - '.github/workflows/validar-folga-etapa-a-pg17.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: folga-etapa-a-pg17-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  etapa-a-aditiva:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: teste_descartavel
+          POSTGRES_DB: folga_teste
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d folga_teste"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: teste_descartavel
+      PGDATABASE: folga_teste
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Criar fixture isolada e verificar PostgreSQL 17
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -Atc "show server_version" | grep -E '^17\\.'
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoFixture.sql
+
+      - name: Capturar definicoes legadas e estruturas antes da Etapa A
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -Atc "select pg_get_functiondef('public.ro_criar_solicitacao_com_aprovador(jsonb,jsonb)'::regprocedure)" > /tmp/folga_rpc_antes.sql
+          psql -X -v ON_ERROR_STOP=1 -Atc "select count(*) from pg_trigger where tgrelid='public.ro_passagem_solicitacoes'::regclass and not tgisinternal" > /tmp/folga_triggers_antes.txt
+          psql -X -v ON_ERROR_STOP=1 -Atc "select count(*) from information_schema.columns where table_schema='public' and table_name='ro_passagem_solicitacoes'" > /tmp/folga_colunas_antes.txt
+
+      - name: Aplicar somente a Etapa A no PostgreSQL temporario
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f docs/implantacao/folga-campo-etapa-a-aditiva-RASCUNHO.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoEtapaAIsolada.sql
+
+      - name: Conferir nao alteracao da funcao e dos triggers legados
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -Atc "select pg_get_functiondef('public.ro_criar_solicitacao_com_aprovador(jsonb,jsonb)'::regprocedure)" > /tmp/folga_rpc_depois.sql
+          diff -u /tmp/folga_rpc_antes.sql /tmp/folga_rpc_depois.sql
+          test "$(cat /tmp/folga_triggers_antes.txt)" = "$(psql -X -v ON_ERROR_STOP=1 -Atc "select count(*) from pg_trigger where tgrelid='public.ro_passagem_solicitacoes'::regclass and not tgisinternal")"
+          test "$(($(cat /tmp/folga_colunas_antes.txt)+4))" = "$(psql -X -v ON_ERROR_STOP=1 -Atc "select count(*) from information_schema.columns where table_schema='public' and table_name='ro_passagem_solicitacoes'")"
+
+      - name: Segunda aplicacao deve falhar sem modificar o banco
+        run: |
+          if psql -X -v ON_ERROR_STOP=1 -f docs/implantacao/folga-campo-etapa-a-aditiva-RASCUNHO.sql > /tmp/folga_segunda_saida.txt 2>&1; then
+            echo "ERRO: reaplicacao nao foi bloqueada"
+            exit 1
+          fi
+          grep -q 'FOLGA_SCHEMA_PRIVADO_JA_EXISTENTE' /tmp/folga_segunda_saida.txt
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoEtapaAIsolada.sql
