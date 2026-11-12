@@ -4,22 +4,22 @@
 select pg_catalog.set_config('test.uid','00000000-0000-0000-0000-000000000001',false);
 
 alter table public.ro_passagem_solicitacoes
-  add column excluida_em timestamptz,
-  add column created_at timestamptz not null default now();
+  add column if not exists excluida_em timestamptz,
+  add column if not exists created_at timestamptz not null default now();
 
 -- Copia estrutural do predicado vigente no Supabase em 11/11/2026.
 create or replace function public.ro_funcionario_possui_folga_futura_ativa(
-  p_func uuid,
-  p_excluir uuid default null
+  p_funcionario_id uuid,
+  p_ignorar_solicitacao_id uuid default null
 ) returns uuid
 language sql stable security definer
 set search_path to 'public', 'pg_temp'
 as $$
   select s.id
   from public.ro_passagem_solicitacoes s
-  where s.funcionario_id=p_func
+  where s.funcionario_id=p_funcionario_id
     and s.motivo='folga_campo'
-    and s.id is distinct from p_excluir
+    and s.id is distinct from p_ignorar_solicitacao_id
     and s.excluida_em is null
     and s.data_ida >= (now() at time zone 'America/Sao_Paulo')::date
     and s.status in ('solicitada','em_andamento','passagem_comprada')
