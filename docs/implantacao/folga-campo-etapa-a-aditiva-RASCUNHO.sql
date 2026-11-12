@@ -9,7 +9,16 @@ begin
     or to_regclass('public.funcionarios') is null
     or to_regclass('public.obras') is null
     or to_regclass('public.ro_funcionarios_enderecos_privados') is null
+    or to_regclass('public.ro_auditoria_interna') is null
+    or to_regclass('public.user_roles') is null
+    or to_regclass('public.ro_responsaveis') is null
+    or to_regclass('auth.users') is null
     or to_regprocedure('public.ro_criar_solicitacao_com_aprovador(jsonb,jsonb)') is null
+    or to_regprocedure('public.ro_is_operador_ativo(uuid)') is null
+    or to_regprocedure('public.ro_funcionario_disponivel_para_usuario(uuid,uuid)') is null
+    or to_regprocedure('public.ro_catalogo_centros_custo()') is null
+    or to_regprocedure('public.ro_funcionario_possui_folga_futura_ativa(uuid,uuid)') is null
+    or to_regprocedure('auth.uid()') is null
   then raise exception 'PREFLIGHT_RO_PASSAGENS_INCOMPATIVEL'; end if;
   -- Nao prosseguir sobre instalacao parcial ou esquema divergente.
   if to_regnamespace('ro_private') is not null
