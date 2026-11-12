@@ -11,6 +11,10 @@ begin
      or pg_catalog.has_function_privilege('authenticated','public.ro_consultar_contexto_distancia_folga(uuid,uuid)','EXECUTE')
   then raise exception 'CONSULTA_KM_EXPOSTA_ANTES_DA_ATIVACAO'; end if;
 
+  if pg_catalog.has_function_privilege('anon','public.ro_corrigir_distancia_folga(uuid,integer,text)','EXECUTE')
+     or pg_catalog.has_function_privilege('authenticated','public.ro_corrigir_distancia_folga(uuid,integer,text)','EXECUTE')
+  then raise exception 'CORRECAO_KM_EXPOSTA_ANTES_DA_ATIVACAO'; end if;
+
   if pg_catalog.has_schema_privilege('anon','ro_private','USAGE')
      or pg_catalog.has_schema_privilege('authenticated','ro_private','USAGE')
   then raise exception 'SCHEMA_PRIVADO_EXPOSTO'; end if;
