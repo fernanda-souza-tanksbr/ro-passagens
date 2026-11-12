@@ -1,4 +1,4 @@
--- PACOTE SOMENTE TESTE - NAO USAR EM PRODUCAO.
+-- PACOTE DE TESTES - NAO EXECUTAR EM PRODUCAO.
 begin;
 
 -- ===== ORIGEM: docs/sql/folga-campo-01-estruturas-RASCUNHO.sql =====
@@ -52,6 +52,19 @@ alter table public.ro_passagem_solicitacoes
   add column if not exists folga_distancia_km integer check (folga_distancia_km >= 0),
   add column if not exists folga_regime_faixa text,
   add column if not exists folga_intervalo_dias integer check (folga_intervalo_dias in (7,14,45,90));
+
+-- Controle privado de ativacao: false preserva o fluxo antigo ate a
+-- publicacao coordenada. Nunca alterar diretamente pelo cliente.
+create table if not exists ro_private.folga_configuracao (
+  chave text primary key check(chave='novo_fluxo_distancia'),
+  ativo boolean not null default false,
+  atualizado_em timestamptz not null default now()
+);
+insert into ro_private.folga_configuracao(chave,ativo)
+values('novo_fluxo_distancia',false)
+on conflict (chave) do nothing;
+alter table ro_private.folga_configuracao enable row level security;
+revoke all on ro_private.folga_configuracao from public,anon,authenticated;
 
 -- Funcao pura e privada: sem leitura de dados e sem SECURITY DEFINER.
 -- Nao conceder EXECUTE a clientes; o servidor devera chama-la na futura RPC.
@@ -598,6 +611,15 @@ begin
       new.folga_regime_faixa := v_contexto.regime_faixa;
       new.folga_intervalo_dias := v_contexto.intervalo_dias;
     else
+      -- Antes da ativacao, preserva a funcao antiga para todas as Folgas.
+      -- Apos a ativacao, BLOQUEIA qualquer Folga nova sem contexto de km,
+      -- inclusive por chamada direta a RPC legada, sem afetar outros motivos.
+      if exists(
+        select 1 from ro_private.folga_configuracao cfg
+        where cfg.chave='novo_fluxo_distancia' and cfg.ativo
+      ) then
+        raise exception 'FOLGA_CAMPO_DISTANCIA_OBRIGATORIA_NOVO_FLUXO';
+      end if;
       -- Caminho legado nao pode falsificar snapshots.
       new.folga_alocacao_id := null;
       new.folga_distancia_km := null;
