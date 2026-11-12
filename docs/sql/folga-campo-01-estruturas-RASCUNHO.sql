@@ -50,6 +50,9 @@ alter table public.ro_passagem_solicitacoes
   add column if not exists folga_regime_faixa text,
   add column if not exists folga_intervalo_dias integer check (folga_intervalo_dias in (7,14,45,90));
 
+create schema if not exists ro_private;
+revoke all on schema ro_private from public,anon,authenticated;
+
 -- Controle privado de ativacao: false preserva o fluxo antigo ate a
 -- publicacao coordenada. Nunca alterar diretamente pelo cliente.
 create table if not exists ro_private.folga_configuracao (
@@ -65,8 +68,6 @@ revoke all on ro_private.folga_configuracao from public,anon,authenticated;
 
 -- Funcao pura e privada: sem leitura de dados e sem SECURITY DEFINER.
 -- Nao conceder EXECUTE a clientes; o servidor devera chama-la na futura RPC.
-create schema if not exists ro_private;
-revoke all on schema ro_private from public,anon,authenticated;
 create or replace function ro_private.regime_folga_km(p_km integer)
 returns table(faixa text, intervalo_dias integer, transporte text)
 language sql immutable
