@@ -20,6 +20,7 @@ begin
   if tg_op='UPDATE'
      and old.motivo='folga_campo' and new.motivo='folga_campo'
      and new.funcionario_id is not distinct from old.funcionario_id
+     and new.colaborador_id is not distinct from old.colaborador_id
      and new.obra_id is not distinct from old.obra_id
      and new.data_ida is not distinct from old.data_ida
      and new.folga_antecipacao_justificativa
@@ -47,13 +48,28 @@ begin
     return new;
   end if;
   perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended(new.funcionario_id::text,904)
+    pg_catalog.hashtextextended(coalesce(new.funcionario_id::text,
+      'privado:'||new.colaborador_id::text),904)
   );
-  v_duplicada := public.ro_funcionario_possui_folga_futura_ativa(
-    new.funcionario_id,new.id
-  );
+  if new.funcionario_id is not null then
+    v_duplicada := public.ro_funcionario_possui_folga_futura_ativa(
+      new.funcionario_id,new.id
+    );
+  elsif new.colaborador_id is not null then
+    select s.id into v_duplicada
+    from public.ro_passagem_solicitacoes s
+    where s.colaborador_id=new.colaborador_id
+      and s.id is distinct from new.id
+      and s.motivo='folga_campo'
+      and s.excluida_em is null
+      and s.data_ida >= (pg_catalog.now() at time zone 'America/Sao_Paulo')::date
+      and s.status in ('solicitada','em_andamento','passagem_comprada')
+      and s.aprovacao_status is distinct from 'reprovada'
+    order by s.data_ida,s.created_at limit 1;
+  end if;
   if v_duplicada is not null and
      (tg_op='INSERT' or new.funcionario_id is distinct from old.funcionario_id
+      or new.colaborador_id is distinct from old.colaborador_id
       or new.data_ida is distinct from old.data_ida) then
     raise exception 'FOLGA_FUTURA_DUPLICADA:%',v_duplicada;
   end if;
@@ -62,7 +78,8 @@ begin
     select * into v_contexto
     from ro_private.folga_criacao_contexto
     where solicitacao_id=new.id
-      and funcionario_id=new.funcionario_id
+      and ((funcionario_id is not null and funcionario_id=new.funcionario_id)
+        or (colaborador_id is not null and colaborador_id=new.colaborador_id))
       and obra_id=new.obra_id
       and criado_por=auth.uid();
 
@@ -86,6 +103,7 @@ begin
     new.folga_regime_faixa := old.folga_regime_faixa;
     new.folga_intervalo_dias := old.folga_intervalo_dias;
     if new.funcionario_id is distinct from old.funcionario_id
+       or new.colaborador_id is distinct from old.colaborador_id
        or new.obra_id is distinct from old.obra_id then
       raise exception 'ALTERACAO_CC_FUNCIONARIO_REQUER_NOVA_SOLICITACAO';
     end if;
@@ -95,7 +113,8 @@ begin
     -- Ancora: ultima folga aprovada/dispensada E finalizada.
     select s.id,s.data_ida into v_anterior,v_ultima_data
     from public.ro_passagem_solicitacoes s
-    where s.funcionario_id=new.funcionario_id
+    where ((new.funcionario_id is not null and s.funcionario_id=new.funcionario_id)
+      or (new.funcionario_id is null and s.colaborador_id=new.colaborador_id))
       and s.id is distinct from new.id
       and s.motivo='folga_campo'
       and s.status='finalizada'
@@ -120,6 +139,7 @@ begin
       raise exception 'JUSTIFICATIVA_ANTECIPACAO_OBRIGATORIA';
     end if;
     if tg_op='INSERT' or new.funcionario_id is distinct from old.funcionario_id
+       or new.colaborador_id is distinct from old.colaborador_id
        or new.data_ida is distinct from old.data_ida
        or new.folga_antecipacao_justificativa is distinct from old.folga_antecipacao_justificativa then
       new.folga_antecipacao_status:='pendente';
