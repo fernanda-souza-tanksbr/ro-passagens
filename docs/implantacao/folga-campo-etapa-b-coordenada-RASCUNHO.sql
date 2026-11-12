@@ -1,10 +1,11 @@
 -- RASCUNHO ETAPA B - NAO EXECUTAR NA PRODUCAO.
--- Troca coordenada de funcoes, sem GRANTS. Exige backup e autorizacao.
+-- Troca coordenada, gate permanece desativado, sem GRANTS.
 begin;
 do $guard$
 begin
   if to_regclass('public.ro_folga_alocacoes') is null
     or to_regclass('ro_private.folga_criacao_contexto') is null
+    or to_regclass('ro_private.folga_configuracao') is null
   then raise exception 'ETAPA_A_NAO_APLICADA'; end if;
   if not exists(select 1 from pg_catalog.pg_trigger
     where tgrelid='public.ro_passagem_solicitacoes'::regclass
@@ -109,6 +110,15 @@ begin
       new.folga_regime_faixa := v_contexto.regime_faixa;
       new.folga_intervalo_dias := v_contexto.intervalo_dias;
     else
+      -- Antes da ativacao, preserva a funcao antiga para todas as Folgas.
+      -- Apos a ativacao, BLOQUEIA qualquer Folga nova sem contexto de km,
+      -- inclusive por chamada direta a RPC legada, sem afetar outros motivos.
+      if exists(
+        select 1 from ro_private.folga_configuracao cfg
+        where cfg.chave='novo_fluxo_distancia' and cfg.ativo
+      ) then
+        raise exception 'FOLGA_CAMPO_DISTANCIA_OBRIGATORIA_NOVO_FLUXO';
+      end if;
       -- Caminho legado nao pode falsificar snapshots.
       new.folga_alocacao_id := null;
       new.folga_distancia_km := null;
