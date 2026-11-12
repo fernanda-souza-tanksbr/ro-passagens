@@ -45,10 +45,13 @@ begin
  then raise exception 'B_GATE_LIGADO';end if;
 
  -- O bloqueio original de compra continua operante para antecipacao pendente.
+ perform pg_catalog.set_config('ro.folga_aprovacao_rpc','1',true);
  update public.ro_passagem_solicitacoes
- set folga_antecipacao_status='pendente',folga_antecipada=true,
-     folga_antecipacao_justificativa='Justificativa ficticia com prazo'
+ set folga_antecipacao_status='pendente',folga_antecipada=true
  where id=v_id;
+ perform pg_catalog.set_config('ro.folga_aprovacao_rpc','',true);
+ if (select folga_antecipacao_status from public.ro_passagem_solicitacoes where id=v_id) is distinct from 'pendente'
+ then raise exception 'B_FALHA_CONFIGURAR_PENDENCIA_DE_TESTE'; end if;
  begin
    update public.ro_passagem_solicitacoes set status='passagem_comprada' where id=v_id;
    raise exception 'B_COMPRA_NAO_BLOQUEADA';
