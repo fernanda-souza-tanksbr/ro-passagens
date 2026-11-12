@@ -51,6 +51,9 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoFixture.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoPacoteIntegrado.sql
 
+      - name: Conferir grants e RLS no pacote isolado
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoGrants.sql
+
       - name: Validar rollback e snapshots em transacoes reais
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoTransacoes.sql -f tests/sql/folgaCampoPermissoes.sql -f tests/sql/folgaCampoAprovacoes.sql
 
