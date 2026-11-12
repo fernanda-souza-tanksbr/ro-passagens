@@ -71,3 +71,6 @@ jobs:
 
       - name: Validar colaboradores privados com e sem vinculo
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoPrivados.sql
+
+      - name: Testar bloqueio da RPC legada apos ativacao e rollback da flag
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoAtivacao.sql
