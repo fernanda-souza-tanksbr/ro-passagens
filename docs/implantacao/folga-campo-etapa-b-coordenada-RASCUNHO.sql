@@ -1,22 +1,18 @@
--- RASCUNHO - ETAPA B / FUNCOES COORDENADAS, NAO EXECUTAR NA PRODUCAO.
--- Requer etapa A aplicada, backup verificavel e autorizacao explicita.
--- Recria as funcoes ligadas aos triggers existentes, sem renomear triggers.
--- SEM GRANT EXECUTE: nao habilita a funcionalidade para authenticated.
+-- RASCUNHO ETAPA B - NAO EXECUTAR NA PRODUCAO.
+-- Troca coordenada de funcoes, sem GRANTS. Exige backup e autorizacao.
 begin;
 do $guard$
 begin
   if to_regclass('public.ro_folga_alocacoes') is null
     or to_regclass('ro_private.folga_criacao_contexto') is null
   then raise exception 'ETAPA_A_NAO_APLICADA'; end if;
-  if not exists (
-    select 1 from pg_catalog.pg_trigger
+  if not exists(select 1 from pg_catalog.pg_trigger
     where tgrelid='public.ro_passagem_solicitacoes'::regclass
-      and tgname='ro_validar_ciclo_folga_campo' and not tgisinternal
-  ) or not exists (
-    select 1 from pg_catalog.pg_trigger
+      and tgname='ro_validar_ciclo_folga_campo' and not tgisinternal)
+   or not exists(select 1 from pg_catalog.pg_trigger
     where tgrelid='public.ro_passagem_solicitacoes'::regclass
-      and tgname='ro_auditar_ciclo_folga_campo' and not tgisinternal
-  ) then raise exception 'TRIGGERS_LEGADOS_NAO_ENCONTRADOS'; end if;
+      and tgname='ro_auditar_ciclo_folga_campo' and not tgisinternal)
+  then raise exception 'TRIGGERS_LEGADOS_NAO_ENCONTRADOS'; end if;
 end
 $guard$;
 
@@ -43,6 +39,7 @@ begin
   if tg_op='UPDATE'
      and old.motivo='folga_campo' and new.motivo='folga_campo'
      and new.funcionario_id is not distinct from old.funcionario_id
+     and new.colaborador_id is not distinct from old.colaborador_id
      and new.obra_id is not distinct from old.obra_id
      and new.data_ida is not distinct from old.data_ida
      and new.folga_antecipacao_justificativa
@@ -70,13 +67,28 @@ begin
     return new;
   end if;
   perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended(new.funcionario_id::text,904)
+    pg_catalog.hashtextextended(coalesce(new.funcionario_id::text,
+      'privado:'||new.colaborador_id::text),904)
   );
-  v_duplicada := public.ro_funcionario_possui_folga_futura_ativa(
-    new.funcionario_id,new.id
-  );
+  if new.funcionario_id is not null then
+    v_duplicada := public.ro_funcionario_possui_folga_futura_ativa(
+      new.funcionario_id,new.id
+    );
+  elsif new.colaborador_id is not null then
+    select s.id into v_duplicada
+    from public.ro_passagem_solicitacoes s
+    where s.colaborador_id=new.colaborador_id
+      and s.id is distinct from new.id
+      and s.motivo='folga_campo'
+      and s.excluida_em is null
+      and s.data_ida >= (pg_catalog.now() at time zone 'America/Sao_Paulo')::date
+      and s.status in ('solicitada','em_andamento','passagem_comprada')
+      and s.aprovacao_status is distinct from 'reprovada'
+    order by s.data_ida,s.created_at limit 1;
+  end if;
   if v_duplicada is not null and
      (tg_op='INSERT' or new.funcionario_id is distinct from old.funcionario_id
+      or new.colaborador_id is distinct from old.colaborador_id
       or new.data_ida is distinct from old.data_ida) then
     raise exception 'FOLGA_FUTURA_DUPLICADA:%',v_duplicada;
   end if;
@@ -85,7 +97,8 @@ begin
     select * into v_contexto
     from ro_private.folga_criacao_contexto
     where solicitacao_id=new.id
-      and funcionario_id=new.funcionario_id
+      and ((funcionario_id is not null and funcionario_id=new.funcionario_id)
+        or (colaborador_id is not null and colaborador_id=new.colaborador_id))
       and obra_id=new.obra_id
       and criado_por=auth.uid();
 
@@ -109,6 +122,7 @@ begin
     new.folga_regime_faixa := old.folga_regime_faixa;
     new.folga_intervalo_dias := old.folga_intervalo_dias;
     if new.funcionario_id is distinct from old.funcionario_id
+       or new.colaborador_id is distinct from old.colaborador_id
        or new.obra_id is distinct from old.obra_id then
       raise exception 'ALTERACAO_CC_FUNCIONARIO_REQUER_NOVA_SOLICITACAO';
     end if;
@@ -118,7 +132,8 @@ begin
     -- Ancora: ultima folga aprovada/dispensada E finalizada.
     select s.id,s.data_ida into v_anterior,v_ultima_data
     from public.ro_passagem_solicitacoes s
-    where s.funcionario_id=new.funcionario_id
+    where ((new.funcionario_id is not null and s.funcionario_id=new.funcionario_id)
+      or (new.funcionario_id is null and s.colaborador_id=new.colaborador_id))
       and s.id is distinct from new.id
       and s.motivo='folga_campo'
       and s.status='finalizada'
@@ -143,6 +158,7 @@ begin
       raise exception 'JUSTIFICATIVA_ANTECIPACAO_OBRIGATORIA';
     end if;
     if tg_op='INSERT' or new.funcionario_id is distinct from old.funcionario_id
+       or new.colaborador_id is distinct from old.colaborador_id
        or new.data_ida is distinct from old.data_ida
        or new.folga_antecipacao_justificativa is distinct from old.folga_antecipacao_justificativa then
       new.folga_antecipacao_status:='pendente';
@@ -244,6 +260,7 @@ begin
        or new.folga_regime_faixa is distinct from old.folga_regime_faixa
        or new.folga_intervalo_dias is distinct from old.folga_intervalo_dias
        or new.funcionario_id is distinct from old.funcionario_id
+       or new.colaborador_id is distinct from old.colaborador_id
        or new.obra_id is distinct from old.obra_id
        or new.motivo is distinct from old.motivo then
       raise exception 'SNAPSHOT_FOLGA_IMUTAVEL';
@@ -318,6 +335,9 @@ declare
   v_id uuid;
   v_criado uuid;
   v_funcionario uuid;
+  v_colaborador uuid;
+  v_canonico_colaborador uuid;
+  v_vinculo uuid;
   v_obra uuid;
   v_episodio jsonb;
 begin
@@ -328,24 +348,36 @@ begin
      or p_solicitacao->>'motivo' is distinct from 'folga_campo' then
     raise exception 'MOTIVO_FOLGA_CAMPO_OBRIGATORIO';
   end if;
-  if p_solicitacao->>'colaborador_id' is not null
-     or p_solicitacao->>'viajante_nome_informado' is not null then
-    raise exception 'VIAJANTE_NAO_SUPORTADO_NESTA_ETAPA';
+  if nullif(p_solicitacao->>'viajante_nome_informado','') is not null then
+    raise exception 'VIAJANTE_MANUAL_REQUER_IDENTIDADE_PERSISTIDA';
   end if;
   begin
     v_id := (p_solicitacao->>'id')::uuid;
-    v_funcionario := (p_solicitacao->>'funcionario_id')::uuid;
+    v_funcionario := nullif(p_solicitacao->>'funcionario_id','')::uuid;
+    v_colaborador := nullif(p_solicitacao->>'colaborador_id','')::uuid;
     v_obra := (p_solicitacao->>'obra_id')::uuid;
   exception when invalid_text_representation then
     raise exception 'IDENTIFICADOR_INVALIDO';
   end;
-  if v_id is null or v_funcionario is null or v_obra is null then
+  if v_id is null or v_obra is null
+     or (v_funcionario is null and v_colaborador is null) then
     raise exception 'IDENTIFICADORES_OBRIGATORIOS';
   end if;
-  -- Validacao previa equivalente aos filtros canonicos do trigger
-  -- ro_validar_solicitacao_visibilidade. A cadeia legada continua sendo
-  -- executada e permanece autoridade final sobre todas as demais regras.
-  if public.ro_funcionario_disponivel_para_usuario(auth.uid(),v_funcionario) is distinct from true then
+  -- O cadastro privado e validado pela propria tabela, como no trigger legado.
+  -- Quando existe vinculo ao cadastro geral, usa esse funcionario como
+  -- identidade canonica (evita separar historicos de uma mesma pessoa).
+  -- Sem vinculo, a chave canonica e o colaborador privado.
+  if v_colaborador is not null then
+    select e.funcionario_id into v_vinculo
+    from public.ro_funcionarios_enderecos_privados e
+    where e.id=v_colaborador and e.ativo;
+    if not found then raise exception 'COLABORADOR_INATIVO_OU_INEXISTENTE'; end if;
+    if v_funcionario is not null and v_funcionario is distinct from v_vinculo then
+      raise exception 'VINCULO_FUNCIONARIO_INCONSISTENTE';
+    end if;
+    v_funcionario:=v_vinculo;
+    if v_funcionario is null then v_canonico_colaborador:=v_colaborador; end if;
+  elsif public.ro_funcionario_disponivel_para_usuario(auth.uid(),v_funcionario) is distinct from true then
     raise exception 'FUNCIONARIO_INDISPONIVEL';
   end if;
   if not exists (
@@ -355,13 +387,14 @@ begin
     raise exception 'CENTRO_CUSTO_INDISPONIVEL';
   end if;
   v_episodio := ro_private.preparar_episodio_folga(
-    v_funcionario,v_obra,p_distancia_declarada_km,p_confirma_retorno
+    v_funcionario,v_obra,p_distancia_declarada_km,p_confirma_retorno,
+    v_canonico_colaborador
   );
   insert into ro_private.folga_criacao_contexto(
-    solicitacao_id,funcionario_id,obra_id,alocacao_id,
+    solicitacao_id,funcionario_id,colaborador_id,obra_id,alocacao_id,
     distancia_km,regime_faixa,intervalo_dias,criado_por
   ) values (
-    v_id,v_funcionario,v_obra,
+    v_id,v_funcionario,v_canonico_colaborador,v_obra,
     (v_episodio->>'alocacao_id')::uuid,
     (v_episodio->>'distancia_km')::integer,
     v_episodio->>'regime_faixa',
@@ -379,7 +412,9 @@ begin
   if not exists (
     select 1 from public.ro_passagem_solicitacoes s
     where s.id=v_id
-      and s.funcionario_id=v_funcionario and s.obra_id=v_obra
+      and s.funcionario_id is not distinct from v_funcionario
+      and s.colaborador_id is not distinct from v_colaborador
+      and s.obra_id=v_obra
       and s.folga_alocacao_id=(v_episodio->>'alocacao_id')::uuid
       and s.folga_distancia_km=(v_episodio->>'distancia_km')::integer
       and s.folga_intervalo_dias=(v_episodio->>'intervalo_dias')::integer
