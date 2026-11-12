@@ -48,7 +48,7 @@ jobs:
 
       - name: Criar fixture isolada e verificar PostgreSQL 17
         run: |
-          psql -X -v ON_ERROR_STOP=1 -Atc "show server_version" | grep -E '^17\\.'
+          psql -X -v ON_ERROR_STOP=1 -Atc "show server_version" | grep -E '^17[.]'
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoFixture.sql
 
       - name: Capturar definicoes legadas e estruturas antes da Etapa A
