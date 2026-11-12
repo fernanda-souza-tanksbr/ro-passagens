@@ -64,7 +64,7 @@ begin
  select folga_distancia_km into v_snapshot from public.ro_passagem_solicitacoes
  where id='00000000-0000-0000-0000-000000000307';
  begin
-   perform ro_private.corrigir_distancia_folga(v_id,220,'Justificativa detalhada para correcao');
+   perform public.ro_corrigir_distancia_folga(v_id,220,'Justificativa detalhada para correcao');
    raise exception 'TESTE_DEVERIA_FALHAR';
  exception when others then
    get stacked diagnostics v_erro=message_text;
@@ -73,7 +73,7 @@ begin
  end;
  insert into public.user_roles(user_id,role)
  values ('00000000-0000-0000-0000-000000000001','coordenador');
- perform ro_private.corrigir_distancia_folga(v_id,220,'Justificativa detalhada para correcao');
+ perform public.ro_corrigir_distancia_folga(v_id,220,'Justificativa detalhada para correcao');
  if (select distancia_km from public.ro_folga_alocacoes where id=v_id)<>220
  or (select count(*) from public.ro_folga_distancia_auditoria)<>v_audit+1
  or (select folga_distancia_km from public.ro_passagem_solicitacoes where id='00000000-0000-0000-0000-000000000307')<>v_snapshot
