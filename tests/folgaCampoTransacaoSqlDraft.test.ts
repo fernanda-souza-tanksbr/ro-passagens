@@ -23,8 +23,8 @@ test("sequencia transacional: episodio, contexto, criacao legada, conferência e
 });
 
 test("episodio compartilha advisory lock e so troca CC dentro da mesma transacao",()=>{
-  assert.match(episodio,/pg_advisory_xact_lock\([\s\S]*hashtextextended\(p_funcionario_id::text, 904\)/);
-  assert.match(ciclo,/pg_advisory_xact_lock\([\s\S]*hashtextextended\(new.funcionario_id::text,904\)/);
+  assert.match(episodio,/pg_advisory_xact_lock\([\s\S]*hashtextextended\(coalesce\(p_funcionario_id::text,'privado:'\|\|p_colaborador_id::text\), 904\)/);
+  assert.match(ciclo,/pg_advisory_xact_lock\([\s\S]*hashtextextended\(coalesce\(new.funcionario_id::text,[\s\S]*new.colaborador_id::text\),904\)/);
   assert.match(episodio,/for update/);
   assert.match(episodio,/CONFIRMACAO_RETORNO_OBRIGATORIA/);
   assert.match(episodio,/CORRECAO_SOMENTE_POR_RPC_AUTORIZADA/);
