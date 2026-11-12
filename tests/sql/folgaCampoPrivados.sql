@@ -155,7 +155,7 @@ end $$;
 
 
 -- Retorno privado exige confirmacao mesmo antes de considerar duplicidade.
-DO $
+DO $$
 declare v_erro text; v_s public.ro_passagem_solicitacoes%rowtype;v_episodio uuid;
 begin
  begin
@@ -203,10 +203,10 @@ begin
   where a.alocacao_id=v_episodio and a.acao='correcao'
     and a.distancia_anterior_km=250 and a.distancia_nova_km=260
  ) then raise exception 'CORRECAO_PRIVADA_SEM_AUDITORIA';end if;
-end $;
+end $$;
 
 -- Evita associar um colaborador vinculado ao funcionario de outra pessoa.
-DO $
+DO $$
 declare v_erro text;
 begin
  begin
@@ -224,6 +224,6 @@ begin
   if v_erro not like '%VINCULO_FUNCIONARIO_INCONSISTENTE%' then
     raise exception 'ERRO_SPOOF_VINCULO_INESPERADO: %',v_erro;end if;
  end;
-end $;
+end $$;
 
 select 'FOLGA_PRIVADOS_COM_E_SEM_VINCULO_OK' as resultado;
