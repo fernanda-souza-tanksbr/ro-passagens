@@ -96,7 +96,7 @@ set ativo=true where chave='novo_fluxo_distancia';
 -- Usuario comum 002: autenticado, sem permissao para cadastro privado.
 select pg_catalog.set_config('test.uid','00000000-0000-0000-0000-000000000002',false);
 set role authenticated;
-DO $
+DO $$
 declare v_msg text; v_count int;
 begin
  -- Tentar burlar a RPC com SELECT direto nas tabelas deve falhar.
@@ -121,11 +121,11 @@ begin
   if v_msg not like '%FUNCIONARIO_INDISPONIVEL%' then
    raise exception 'C1_FUNCIONARIO_INDEVIDO_ERRO:%',v_msg;end if;
  end;
-end $;
+end $$;
 reset role;
 
 set role authenticated;
-DO $
+DO $$
 declare v_msg text;
 begin
  begin
