@@ -1,0 +1,56 @@
+name: Folga C2 - interface browser ficticia e isolada
+
+on:
+  push:
+    branches:
+      - feat/folga-campo-regimes-distancia
+    paths:
+      - 'homologacao/folga-campo/**'
+      - 'tests/e2e/folgaCampoHomologacao.spec.ts'
+      - '.github/workflows/validar-folga-c2-interface.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: folga-c2-browser-\${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  navegador-ficticio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Preparar testes Playwright isolados e fixados
+        run: |
+          npm ci --ignore-scripts
+          npm install --no-save --package-lock=false --ignore-scripts @playwright/test@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Servir apenas HTML ficticio da demonstracao
+        run: |
+          python3 -m http.server 8008 --bind 127.0.0.1 --directory homologacao/folga-campo > /tmp/folga-http.log 2>&1 &
+          for i in $(seq 1 25); do
+            if curl -fsS http://127.0.0.1:8008/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/folga-http.log
+          exit 1
+      - name: Provar ausencia de qualquer referencia a API ou endpoint real
+        run: |
+          if grep -Eiq '(createClient|supabase[.]co|fetch[[:space:]]*[(]|XMLHttpRequest|new WebSocket)' homologacao/folga-campo/index.html; then
+            echo 'HALT: demonstracao contem possibilidade de conexao externa'
+            exit 1
+          fi
+          grep -F "connect-src 'none'" homologacao/folga-campo/index.html
+      - name: Testar cenarios de ponta a ponta no navegador
+        run: npx playwright test tests/e2e/folgaCampoHomologacao.spec.ts --reporter=list --workers=1 --browser=chromium
