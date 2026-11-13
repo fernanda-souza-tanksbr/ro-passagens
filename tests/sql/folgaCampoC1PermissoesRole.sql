@@ -285,5 +285,43 @@ begin
  then raise exception 'C1_CORRECAO_AUDITORIA_SNAPSHOT_FALHOU';end if;
 end $$;
 
+
+-- Coordenador e gerente tambem podem corrigir, conforme a regra existente.
+-- A identidade e verificada dentro da funcao privada, sem GRANT nas tabelas.
+insert into public.user_roles(user_id,role)
+values ('00000000-0000-0000-0000-000000000002','coordenador');
+select pg_catalog.set_config('test.uid','00000000-0000-0000-0000-000000000002',false);
+set role authenticated;
+DO $$
+declare v_id uuid := current_setting('test.alocacao_id')::uuid;
+begin
+ perform public.ro_corrigir_distancia_folga(
+  v_id,230,'Ajuste autorizado pela coordenacao de campo');
+end $$;
+reset role;
+
+delete from public.user_roles
+where user_id='00000000-0000-0000-0000-000000000002'
+  and role='coordenador';
+insert into public.user_roles(user_id,role)
+values ('00000000-0000-0000-0000-000000000002','gerente');
+set role authenticated;
+DO $$
+declare v_id uuid := current_setting('test.alocacao_id')::uuid;
+begin
+ perform public.ro_corrigir_distancia_folga(
+  v_id,240,'Revisao autorizada pela gerencia da obra');
+end $$;
+reset role;
+DO $$
+declare v_id uuid := current_setting('test.alocacao_id')::uuid;
+begin
+ if (select distancia_km from public.ro_folga_alocacoes where id=v_id)<>240
+    or (select count(*) from public.ro_folga_distancia_auditoria where alocacao_id=v_id and acao='correcao')<>3
+    or (select folga_distancia_km from public.ro_passagem_solicitacoes
+      where id='00000000-0000-0000-0000-000000000903')<>200
+ then raise exception 'C1_COORDENADOR_GERENTE_AUDITORIA_FALHOU';end if;
+end $$;
+
 rollback;
 select 'FOLGA_C1_ACESSO_COM_GATE_FALSO_E_ATIVO_SIMULADO_OK' as resultado;
