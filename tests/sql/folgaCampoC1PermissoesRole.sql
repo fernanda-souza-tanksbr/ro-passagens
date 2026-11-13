@@ -201,13 +201,15 @@ begin
 end $$;
 reset role;
 
+select set_config('test.alocacao_id',(select id::text from public.ro_folga_alocacoes limit 1),false);
+
 -- Usuário comum nao pode corrigir, mesmo conhecendo ID do episodio.
 select pg_catalog.set_config('test.uid','00000000-0000-0000-0000-000000000002',false);
 set role authenticated;
 DO $$
 declare v_id uuid; v_msg text;
 begin
- select id into v_id from public.ro_folga_alocacoes limit 1;
+ v_id:=current_setting('test.alocacao_id')::uuid;
  begin
   perform public.ro_corrigir_distancia_folga(v_id,220,'Justificativa regular de mais de dez caracteres');
   raise exception 'C1_COMUM_CORRIGIU';
@@ -224,8 +226,7 @@ set role authenticated;
 DO $$
 declare v_id uuid; v_old integer; v_msg text; v_aud int;
 begin
- select id,distancia_km into v_id,v_old from public.ro_folga_alocacoes limit 1;
- select count(*) into v_aud from public.ro_folga_distancia_auditoria;
+ v_id:=current_setting('test.alocacao_id')::uuid;
  begin
   perform public.ro_corrigir_distancia_folga(v_id,220,'curta');
   raise exception 'C1_SEM_JUSTIFICATIVA_CORRIGIU';
@@ -235,13 +236,18 @@ begin
    raise exception 'C1_JUSTIFICATIVA_ERRO:%',v_msg;end if;
  end;
  perform public.ro_corrigir_distancia_folga(v_id,220,'Justificativa autorizada para corrigir distancia');
+
+end $$;
+reset role;
+DO $
+declare v_id uuid := current_setting('test.alocacao_id')::uuid;
+begin
  if (select distancia_km from public.ro_folga_alocacoes where id=v_id)<>220
-   or (select count(*) from public.ro_folga_distancia_auditoria)<>v_aud+1
+   or (select count(*) from public.ro_folga_distancia_auditoria where alocacao_id=v_id and acao='correcao')<>1
    or (select folga_distancia_km from public.ro_passagem_solicitacoes
        where id='00000000-0000-0000-0000-000000000903')<>200
  then raise exception 'C1_CORRECAO_AUDITORIA_SNAPSHOT_FALHOU';end if;
-end $$;
-reset role;
+end $;
 
 rollback;
 select 'FOLGA_C1_ACESSO_COM_GATE_FALSO_E_ATIVO_SIMULADO_OK' as resultado;
