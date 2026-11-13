@@ -239,7 +239,7 @@ begin
 
 end $$;
 reset role;
-DO $
+DO $$
 declare v_id uuid := current_setting('test.alocacao_id')::uuid;
 begin
  if (select distancia_km from public.ro_folga_alocacoes where id=v_id)<>220
@@ -247,7 +247,7 @@ begin
    or (select folga_distancia_km from public.ro_passagem_solicitacoes
        where id='00000000-0000-0000-0000-000000000903')<>200
  then raise exception 'C1_CORRECAO_AUDITORIA_SNAPSHOT_FALHOU';end if;
-end $;
+end $$;
 
 rollback;
 select 'FOLGA_C1_ACESSO_COM_GATE_FALSO_E_ATIVO_SIMULADO_OK' as resultado;
