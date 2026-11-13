@@ -11,7 +11,7 @@ Data: 13/11/2026. Projeto Portal TanksBR: Supabase `hukhwirdrpylxpaedjbc`, Verce
 - `src/pages.tsx`: `NOVO_FLUXO_FOLGA_ATIVO=false` no código atual. O preview da branch com esse arquivo NÃO mostra ainda a Folga por km.
 - Vercel `portal-tks-br` compartilha `VITE_SUPABASE_URL`, `VITE_SUPABASE_PROJECT_ID` e `VITE_SUPABASE_PUBLISHABLE_KEY` entre **production e preview**. Assim, **proibido** fazer testes com escrita em preview desse projeto; preview de frontend não implica banco isolado.
 - Criado projeto **separado** Vercel `ro-folga-campo-homologacao` (ID `prj_r5GAUXcLIfZCKhM4AfJA8EOafoRH`) **sem variáveis de ambiente**, sem Git conectado, com SSO. Conteúdo estático enviado de `homologacao/folga-campo/index.html`. Este projeto não é o `portal-tks-br`.
-- URL de conferência visual: `https://ro-folga-campo-homologacao-ny997kutx-tanks.vercel.app`.
+- URL de conferência visual: `https://ro-folga-campo-homologacao-9t5ftfput-tanks.vercel.app`.
 - CSP do mock: `connect-src 'none'`, `default-src 'none'`; não contém SDK Supabase, fetch, XMLHttpRequest nem WebSocket; sem login, sem dados, aprovações, compras ou e-mails.
 - GitHub Actions navegador em `.github/workflows/validar-folga-c2-interface.yml`, Playwright/Chromium em runner GitHub Ubuntu 24.04 e dados fictícios.
 - Testes SQL separados em PostgreSQL17 descartável (`.github/workflows/testar-folga-sql.yml` e `.github/workflows/validar-folga-etapa-c1-pg17.yml`).
