@@ -8,7 +8,7 @@ Data: 13/11/2026. Projeto Portal TanksBR: Supabase `hukhwirdrpylxpaedjbc`, Verce
 
 - A `20261112192620`, B `20261113110519`, C1 `20261113164939` aplicadas. Configuração de ativação deve permanecer **false** até uma futura aprovação.
 - As novas RPCs C1 requerem `novo_fluxo_distancia=true`; com false rejeitam qualquer execução funcional.
-- `src/pages.tsx`: `NOVO_FLUXO_FOLGA_ATIVO=false` no código atual. O preview da branch com esse arquivo NÃO mostra ainda a Folga por km.
+- `src/pages.tsx` agora usa `src/folgaCampoFeatureConfig.ts`: o novo fluxo fica **desligado por padrão** e só é exposto com a configuração de build `VITE_FOLGA_CAMPO_KM_ENABLED=C2_PRODUCAO_APROVADA` num release futuro autorizado. Esta string não é segredo nem mecanismo de controle de acesso.
 - Vercel `portal-tks-br` compartilha `VITE_SUPABASE_URL`, `VITE_SUPABASE_PROJECT_ID` e `VITE_SUPABASE_PUBLISHABLE_KEY` entre **production e preview**. Assim, **proibido** fazer testes com escrita em preview desse projeto; preview de frontend não implica banco isolado.
 - Criado projeto **separado** Vercel `ro-folga-campo-homologacao` (ID `prj_r5GAUXcLIfZCKhM4AfJA8EOafoRH`) **sem variáveis de ambiente**, sem Git conectado, com SSO. Conteúdo estático enviado de `homologacao/folga-campo/index.html`. Este projeto não é o `portal-tks-br`.
 - URL de conferência visual: `https://ro-folga-campo-homologacao-9t5ftfput-tanks.vercel.app`.
@@ -76,3 +76,10 @@ Data: 13/11/2026. Projeto Portal TanksBR: Supabase `hukhwirdrpylxpaedjbc`, Verce
 ## Decisão pendente
 
 A interface de demonstração está disponível à revisão visual; **não há aprovação para C2 ou deploy da aplicação de produção**. A etapa C2 só pode ser considerada pronta para ativação após sanar o risco de transição entre frontend antigo/novo e demonstrar integração Auth/RPC isolada com frontend React real.
+
+## Preparação da flag da interface (sem ativação)
+
+- O arquivo `src/folgaCampoFeatureConfig.ts` exige o valor exato `C2_PRODUCAO_APROVADA`; ausência de variável, `true`, `1` e qualquer outro valor resultam em `false`.
+- Os testes `tests/folgaCampoFeatureConfig.test.ts` verificam a ativação apenas explícita.
+- Nenhuma variável foi criada/alterada na Vercel. O preview atual do projeto principal continua conectado à produção e não deve receber testes de escrita.
+- A variável só poderá ser configurada no build de produção explicitamente aprovado, em coordenação com o gate SQL C2, os clientes antigos e a janela operacional.
