@@ -1,0 +1,98 @@
+name: Folga de Campo - homologacao C1 permissoes PostgreSQL 17
+
+on:
+  push:
+    branches:
+      - feat/folga-campo-regimes-distancia
+    paths:
+      - 'docs/implantacao/folga-campo-etapa-c1-permissoes-RASCUNHO.sql'
+      - 'docs/implantacao/folga-campo-reversao-etapa-c1-RASCUNHO.sql'
+      - 'tests/sql/folgaCampoC1PermissoesRole.sql'
+      - '.github/workflows/validar-folga-etapa-c1-pg17.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: folga-c1-pg17-\${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  permissoes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: teste_descartavel
+          POSTGRES_DB: folga_teste
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d folga_teste"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: teste_descartavel
+      PGDATABASE: folga_teste
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Preparar PostgreSQL 17 e as migracoes A e B em banco temporario
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -Atc "show server_version" | grep -E '^17[.]'
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoFixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoLegadoRealFixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/implantacao/folga-campo-etapa-a-aditiva-RASCUNHO.sql
+          psql -X -v ON_ERROR_STOP=1 -c "drop function public.ro_funcionario_possui_folga_futura_ativa(uuid,uuid)"
+          psql -X -v ON_ERROR_STOP=1 -c "drop function public.ro_obter_ciclo_folga_funcionario(uuid)"
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoLegadoRealCaptura.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/implantacao/folga-campo-etapa-b-coordenada-RASCUNHO.sql
+
+      - name: Guardar hashes das tres funcoes C1 originais
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -Atc "select md5(pg_get_functiondef('public.ro_criar_folga_campo_com_distancia(jsonb,jsonb,integer,boolean)'::regprocedure))" > /tmp/criar_antes
+          psql -X -v ON_ERROR_STOP=1 -Atc "select md5(pg_get_functiondef('public.ro_consultar_contexto_distancia_folga(uuid,uuid,uuid)'::regprocedure))" > /tmp/consultar_antes
+          psql -X -v ON_ERROR_STOP=1 -Atc "select md5(pg_get_functiondef('public.ro_corrigir_distancia_folga(uuid,integer,text)'::regprocedure))" > /tmp/corrigir_antes
+          grep -x 'bc6e1d8c6c5a5a2c5d3c4e91610eec91' /tmp/criar_antes
+          grep -x 'c7d39b69c3297eb76c9da691ca7ceae2' /tmp/consultar_antes
+          grep -x '2ae400e3e5ea5a9b702cf0e670156be9' /tmp/corrigir_antes
+
+      - name: Aplicar C1 somente no Postgres temporario, mantendo gate false
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f docs/implantacao/folga-campo-etapa-c1-permissoes-RASCUNHO.sql
+          test "$(psql -X -v ON_ERROR_STOP=1 -Atc "select ativo from ro_private.folga_configuracao where chave='novo_fluxo_distancia'")" = "f"
+          test "$(psql -X -v ON_ERROR_STOP=1 -Atc "select has_function_privilege('authenticated','public.ro_criar_folga_campo_com_distancia(jsonb,jsonb,integer,boolean)','EXECUTE')")" = "t"
+
+      - name: Reverter somente C1 e conferir tres funcoes restauradas
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f docs/implantacao/folga-campo-reversao-etapa-c1-RASCUNHO.sql
+          test "$(psql -X -v ON_ERROR_STOP=1 -Atc "select to_regprocedure('ro_private.autorizar_acesso_folga(uuid)') is null")" = "t"
+          test "$(psql -X -v ON_ERROR_STOP=1 -Atc "select has_function_privilege('authenticated','public.ro_criar_folga_campo_com_distancia(jsonb,jsonb,integer,boolean)','EXECUTE')")" = "f"
+          psql -X -v ON_ERROR_STOP=1 -Atc "select md5(pg_get_functiondef('public.ro_criar_folga_campo_com_distancia(jsonb,jsonb,integer,boolean)'::regprocedure))" > /tmp/criar_revertido
+          psql -X -v ON_ERROR_STOP=1 -Atc "select md5(pg_get_functiondef('public.ro_consultar_contexto_distancia_folga(uuid,uuid,uuid)'::regprocedure))" > /tmp/consultar_revertido
+          psql -X -v ON_ERROR_STOP=1 -Atc "select md5(pg_get_functiondef('public.ro_corrigir_distancia_folga(uuid,integer,text)'::regprocedure))" > /tmp/corrigir_revertido
+          diff -u /tmp/criar_antes /tmp/criar_revertido
+          diff -u /tmp/consultar_antes /tmp/consultar_revertido
+          diff -u /tmp/corrigir_antes /tmp/corrigir_revertido
+
+      - name: Reaplicar C1 e testar permissoes efetivas com as roles
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f docs/implantacao/folga-campo-etapa-c1-permissoes-RASCUNHO.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoC1PermissoesRole.sql
+
+      - name: Confirmar gate false, RLS e ausencia de dados ficticios apos rollback do teste
+        run: |
+          test "$(psql -X -v ON_ERROR_STOP=1 -Atc "select ativo from ro_private.folga_configuracao where chave='novo_fluxo_distancia'")" = "f"
+          test "$(psql -X -v ON_ERROR_STOP=1 -Atc "select count(*) from public.ro_folga_alocacoes")" = "0"
+          test "$(psql -X -v ON_ERROR_STOP=1 -Atc "select count(*) from public.ro_folga_distancia_auditoria")" = "0"
+          test "$(psql -X -v ON_ERROR_STOP=1 -Atc "select count(*) from public.ro_passagem_solicitacoes")" = "0"
+          test "$(psql -X -v ON_ERROR_STOP=1 -Atc "select bool_and(rowsecurity) from pg_tables where (schemaname='public' and tablename in ('ro_folga_alocacoes','ro_folga_distancia_auditoria')) or (schemaname='ro_private' and tablename in ('folga_configuracao','folga_criacao_contexto'))")" = "t"
