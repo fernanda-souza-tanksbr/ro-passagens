@@ -48,10 +48,11 @@ import { planejarRotaCriacao } from "./folgaCampoCompatibilidade";
 import { montarChamadaCriacao } from "./folgaCampoCriacaoRpc";
 import { adicionarDiasIso, regimePorDistancia } from "./folgaCampoRegimes";
 import { FolgaCampoQuilometragem } from "./FolgaCampoQuilometragem";
+import { fluxoFolgaDistanciaHabilitado } from "./folgaCampoFeatureConfig";
 import { consultarContextoFolga } from "./folgaCampoConsulta";
 import type { ContextoDistanciaServidor } from "./folgaCampoContextoServidor";
 // Ativacao proibida antes de migracao, autorizacao de consulta e testes completos.
-const NOVO_FLUXO_FOLGA_ATIVO = false;
+const NOVO_FLUXO_FOLGA_ATIVO = fluxoFolgaDistanciaHabilitado(import.meta.env.VITE_FOLGA_CAMPO_KM_ENABLED);
 import { invalidateAccess } from "./accessCache";
 import { getCatalogCacheUser, invalidateCatalogs, loadCatalogs, subscribeCatalogInvalidation } from "./catalogCache";
 import { subscribeVisible } from "./visibilityRevalidation";
