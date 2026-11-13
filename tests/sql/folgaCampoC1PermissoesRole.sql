@@ -96,7 +96,36 @@ set ativo=true where chave='novo_fluxo_distancia';
 -- Usuario comum 002: autenticado, sem permissao para cadastro privado.
 select pg_catalog.set_config('test.uid','00000000-0000-0000-0000-000000000002',false);
 set role authenticated;
-DO $$
+DO $
+declare v_msg text; v_count int;
+begin
+ -- Tentar burlar a RPC com SELECT direto nas tabelas deve falhar.
+ begin
+   execute 'select count(*) from public.ro_folga_alocacoes' into v_count;
+   raise exception 'C1_TABELA_ALOCACOES_EXPOSTA';
+ exception when insufficient_privilege then null;
+ end;
+ begin
+   execute 'select count(*) from public.ro_folga_distancia_auditoria' into v_count;
+   raise exception 'C1_TABELA_AUDITORIA_EXPOSTA';
+ exception when insufficient_privilege then null;
+ end;
+ -- Funcionario inexistente fora do catalogo nao tem contexto consultavel.
+ begin
+  perform public.ro_consultar_contexto_distancia_folga(
+   '00000000-0000-0000-0000-000000000999',
+   '00000000-0000-0000-0000-000000000201',null);
+  raise exception 'C1_FUNCIONARIO_INEXISTENTE_CONSULTOU';
+ exception when others then
+  get stacked diagnostics v_msg=message_text;
+  if v_msg not like '%FUNCIONARIO_INDISPONIVEL%' then
+   raise exception 'C1_FUNCIONARIO_INDEVIDO_ERRO:%',v_msg;end if;
+ end;
+end $;
+reset role;
+
+set role authenticated;
+DO $
 declare v_msg text;
 begin
  begin
@@ -138,6 +167,13 @@ begin
   '00000000-0000-0000-0000-000000000701');
  if c->>'estado' is distinct from 'informar'
  then raise exception 'C1_PRIVADO_AUTORIZADO_FALHOU:%',c;end if;
+ -- Cadastro privado vinculado ao funcionario 105: identidade canonica.
+ c:=public.ro_consultar_contexto_distancia_folga(
+  null,'00000000-0000-0000-0000-000000000201',
+  '00000000-0000-0000-0000-000000000702');
+ if c->>'funcionario_id' is distinct from '00000000-0000-0000-0000-000000000105'
+    or c->>'estado' is distinct from 'informar'
+ then raise exception 'C1_PRIVADO_VINCULADO_FALHOU:%',c;end if;
  c:=public.ro_consultar_contexto_distancia_folga(
   '00000000-0000-0000-0000-000000000101',
   '00000000-0000-0000-0000-000000000201',null);
