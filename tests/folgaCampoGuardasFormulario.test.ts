@@ -6,7 +6,8 @@ import { validarContextoDistancia } from "../src/folgaCampoContextoServidor.ts";
 const pages=readFileSync("src/pages.tsx","utf8");
 
 test("novo fluxo permanece desligado ate rollout autorizado",()=>{
-  assert.match(pages,/const NOVO_FLUXO_FOLGA_ATIVO\s*=\s*false/);
+  assert.match(pages,/const NOVO_FLUXO_FOLGA_ATIVO\s*=\s*fluxoFolgaDistanciaHabilitado\(import\.meta\.env\.VITE_FOLGA_CAMPO_KM_ENABLED\)/);
+  assert.match(readFileSync("src/folgaCampoFeatureConfig.ts","utf8"),/valor === "C2_PRODUCAO_APROVADA"/);
 });
 
 test("formulario privado vinculado nao exige id de funcionario que o catalogo nao informou",()=>{
