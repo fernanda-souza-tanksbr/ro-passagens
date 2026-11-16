@@ -32,3 +32,8 @@ as $$
  select exists (select 1 from public.ro_responsaveis r where r.user_id=p_user and r.ativo);
 $$;
 revoke execute on function public.ro_can_view_private_addresses(uuid) from public,anon;
+
+-- Somente a RPC legada REDUZIDA do fixture recebe SECURITY DEFINER para
+-- executar INSERT sob RLS, reproduzindo o caminho de teste da RPC real.
+-- Isto NAO comprova as validacoes operacionais da RPC legada de producao.
+alter function public.ro_criar_solicitacao_com_aprovador(jsonb,jsonb) security definer;
