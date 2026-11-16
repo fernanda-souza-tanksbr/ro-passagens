@@ -1,0 +1,71 @@
+name: Folga C2 - Auth PostgREST PostgreSQL reais isolados
+on:
+  push:
+    branches: [feat/folga-campo-regimes-distancia]
+    paths:
+      - '.github/workflows/folga-c2-servicos-reais.yml'
+      - 'tests/c2-real/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: folga-c2-servicos-reais-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  real:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: teste_descartavel
+          POSTGRES_DB: folga_teste
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d folga_teste"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: teste_descartavel
+      PGDATABASE: folga_teste
+      JWT_SECRET: c2-ficticio-descartavel-uma-chave-de-teste-mais-de-32-bytes
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Montar baseline minimo com definicoes capturadas
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoFixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoLegadoRealFixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/implantacao/folga-campo-etapa-a-aditiva-RASCUNHO.sql
+          psql -X -v ON_ERROR_STOP=1 -c 'drop function public.ro_funcionario_possui_folga_futura_ativa(uuid,uuid)'
+          psql -X -v ON_ERROR_STOP=1 -c 'drop function public.ro_obter_ciclo_folga_funcionario(uuid)'
+          psql -X -v ON_ERROR_STOP=1 -f tests/sql/folgaCampoLegadoRealCaptura.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/implantacao/folga-campo-etapa-b-coordenada-RASCUNHO.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/implantacao/folga-campo-etapa-c1-permissoes-RASCUNHO.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/c2-real/postgrest-bootstrap.sql
+      - name: Iniciar PostgREST real em container temporario
+        run: |
+          set -euo pipefail
+          docker run -d --name folga-postgrest --network host \
+            -e PGRST_DB_URI='postgres://authenticator:teste_descartavel@127.0.0.1:5432/folga_teste' \
+            -e PGRST_DB_SCHEMAS=public -e PGRST_DB_ANON_ROLE=anon \
+            -e PGRST_JWT_SECRET="$JWT_SECRET" \
+            -e PGRST_SERVER_PORT=3000 \
+            postgrest/postgrest:v12.2.8
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:3000/ >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          docker logs folga-postgrest
+      - name: Testar chamadas HTTP, roles, RLS, criacao e bloqueio legado
+        run: bash tests/c2-real/test-postgrest.sh
+      - name: Evidencia de isolamento
+        if: always()
+        run: |
+          docker ps -a --filter name=folga-postgrest
+          echo 'Sem URLs, chaves ou credenciais de producao. PostgreSQL e PostgREST locais descartados com o runner.'
