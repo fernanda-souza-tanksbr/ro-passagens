@@ -8,6 +8,7 @@ export type CreationRpcError = {
 const FALLBACK = "Não foi possível criar a solicitação. Verifique os dados informados e tente novamente.";
 
 const MESSAGES: Array<[RegExp, string]> = [
+  [/FOLGA_CAMPO_DISTANCIA_OBRIGATORIA_NOVO_FLUXO|FOLGA_CAMPO_KM_AINDA_DESATIVADO/, "O formulário de Folga de Campo foi atualizado. Recarregue a página antes de criar esta solicitação. As demais solicitações continuam disponíveis."],
   [/JUSTIFICATIVA_EXCECAO_(INVALIDA|OBRIGATORIA)/, "Informe uma justificativa mais detalhada, com pelo menos 20 caracteres."],
   [/ORIGEM_INVALIDA/, "Informe uma origem válida."],
   [/DESTINO_INVALIDO/, "Informe um destino válido."],
