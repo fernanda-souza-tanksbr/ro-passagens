@@ -1488,7 +1488,7 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
     >
       <form className="card form" onSubmit={submit} onKeyDown={(event) => { if (event.key === "Enter" && !(event.target instanceof HTMLTextAreaElement)) event.preventDefault(); }}>
         {erro && <div className="error wide">{erro}</div>}
-        {avisoVersaoFolga && form.motivo === "folga_campo" && <div className="alert wide" role="alert">{avisoVersaoFolga} <button type="button" className="btn secondary" onClick={() => window.location.reload()}>Atualizar pagina</button></div>}
+        {avisoVersaoFolga && form.motivo === "folga_campo" && <div className="alert wide" role="alert">{avisoVersaoFolga} <button type="button" className="btn secondary" onClick={() => location.reload()}>Atualizar pagina</button></div>}
         <label>
           Solicitante
           <input value={solicitante} readOnly />
