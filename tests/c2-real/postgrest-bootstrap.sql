@@ -9,7 +9,7 @@ revoke execute on function public.ro_criar_solicitacao_com_aprovador(jsonb,jsonb
 -- Adaptador do fixture: auth.uid() usa o claim real enviado por PostgREST, sem perder
 -- o parametro test.uid dos testes SQL anteriores.
 create or replace function auth.uid() returns uuid language sql stable
-as $$ select nullif(coalesce(nullif(current_setting('request.jwt.claim.sub',true),''),nullif(current_setting('test.uid',true),'')),'')::uuid $$;
+as $$ select nullif(coalesce(nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'sub',nullif(current_setting('test.uid',true),'')),'')::uuid $$;
 grant usage on schema auth to authenticated,anon;
 grant execute on function auth.uid() to authenticated,anon;
 -- Auth do fixture nao e GoTrue: estas duas identidades sao apenas registros ficticios.
