@@ -67,6 +67,7 @@ async function fixture(page:Page, data:MockData) {
         user_roles:[{role:"coordenador"}],
         users_profiles:{full_name:"Operador Fictício"},
         ro_responsaveis:null,
+        ro_listar_minhas_notificacoes:[],
         ro_calendario_nao_util:[],
         ro_calendario_anos:[{ano:2026,completo:true},{ano:2027,completo:true},{ano:2028,completo:true}],
         obras:WORKS,
