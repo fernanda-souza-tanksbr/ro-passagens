@@ -1,4 +1,4 @@
-name: Folga C2 - Auth PostgREST PostgreSQL reais isolados
+name: Folga C2 - PostgREST PostgreSQL reais isolados
 on:
   push:
     branches: [feat/folga-campo-regimes-distancia]
