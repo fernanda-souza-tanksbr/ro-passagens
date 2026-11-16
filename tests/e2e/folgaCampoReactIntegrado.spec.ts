@@ -138,14 +138,14 @@ test("React real: funcionario privado sem vinculo e vinculado",async({page})=>{
  await page.getByLabel("Funcionário *").selectOption(PRIVATE);
  await page.getByLabel("Motivo *").selectOption("folga_campo");
  await page.getByRole("combobox",{name:"Centro de custo atual *"}).fill("254");
- await page.getByRole("option",{name:/254/}).click();
+ await page.locator(".cost-center-combobox").getByRole("option",{name:/254/}).click();
  await expect(page.getByLabel("Quilometragem da Folga de Campo")).toBeVisible();
  expect(state.rpc.some(x=>x.name==="ro_consultar_contexto_distancia_folga" && x.body.p_colaborador_id===PRIVATE)).toBe(true);
  state.data="linked";
  await expect(page.getByLabel("Funcionário *").locator(`option[value="${LINKED}"]`)).toHaveCount(1);
  await page.getByLabel("Funcionário *").selectOption(LINKED);
  await page.getByRole("combobox",{name:"Centro de custo atual *"}).fill("254");
- await page.getByRole("option",{name:/254/}).click();
+ await page.locator(".cost-center-combobox").getByRole("option",{name:/254/}).click();
  await expect(page.getByLabel("Quilometragem da Folga de Campo")).toBeVisible();
  expect(state.rpc.some(x=>x.name==="ro_consultar_contexto_distancia_folga" && x.body.p_colaborador_id===LINKED)).toBe(true);
 });
