@@ -45,6 +45,7 @@ import { buildPurchaseCosts, totalTicketValues } from "./purchaseCosts";
 import { buildPurchaseAttachmentInsert } from "./purchaseAttachmentPayload";
 import { supabase } from "./supabase";
 import { planejarRotaCriacao } from "./folgaCampoCompatibilidade";
+import { checarVersaoFolga, VERSAO_FORMULARIO_FOLGA } from "./folgaCampoVersao";
 import { montarChamadaCriacao } from "./folgaCampoCriacaoRpc";
 import { adicionarDiasIso, regimePorDistancia } from "./folgaCampoRegimes";
 import { FolgaCampoQuilometragem } from "./FolgaCampoQuilometragem";
@@ -1346,6 +1347,13 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setErro("");
+    if (form.motivo === "folga_campo") {
+      const compatibilidade = await checarVersaoFolga(VERSAO_FORMULARIO_FOLGA);
+      if (!compatibilidade.ok) {
+        setErro(compatibilidade.mensagem);
+        return;
+      }
+    }
     const viajanteManual = access.isRh && form.viajante_modo === "manual";
     if (!viajanteManual && !form.funcionario_id) { setErro("Selecione o funcionário."); return; }
     if (viajanteManual && form.viajante_nome_informado.trim().replace(/\s+/g, " ").length < 3) { setErro("Informe o nome completo do viajante."); return; }
@@ -1395,6 +1403,10 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
     if (categoria && !documento) { setErro("Anexe o documento interno obrigatório em PDF."); return; }
     if (calculo.anosPendentes.length) { setErro(`O calendário de dias não úteis de ${calculo.anosPendentes[0]} ainda não foi validado.`); return; }
     if (!window.confirm("Confirmar a criação desta solicitação de passagem? Verifique os dados antes de continuar.")) return;
+    if (form.motivo === "folga_campo") {
+      const compatibilidade = await checarVersaoFolga(VERSAO_FORMULARIO_FOLGA);
+      if (!compatibilidade.ok) { setErro(compatibilidade.mensagem); return; }
+    }
     setBusy(true);
     const id = crypto.randomUUID(); const documentos: Array<Record<string,string|number>> = []; let uploadedPath="";
     if (documento && categoria) {
