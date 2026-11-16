@@ -40,3 +40,16 @@ status=$(call ro_criar_solicitacao_com_aprovador '{"p_solicitacao":{"id":"000000
 echo "C2 HTTP checkpoint status=$status resposta=$(cat /tmp/c2-response.json)"
 test "$status" = 200
 echo 'C2_POSTGREST_REAL_JWT_RLS_RPC_GATE_LEGADO_OK'
+
+# Trava seletiva no servidor: bloqueia cliente novo e antigo mesmo com gate ativo.
+psql -X -v ON_ERROR_STOP=1 -c "update ro_private.folga_suspensao_criacao set ativo=true where chave='novas_folgas_campo'"
+status=$(call ro_criar_solicitacao_com_aprovador '{"p_solicitacao":{"id":"00000000-0000-0000-0000-000000000954","funcionario_id":"00000000-0000-0000-0000-000000000102","obra_id":"00000000-0000-0000-0000-000000000201","motivo":"folga_campo","data_ida":"2027-12-03"},"p_documentos":[]}')
+test "$status" = 400
+grep -q FOLGA_CAMPO_TEMPORARIAMENTE_SUSPENSA /tmp/c2-response.json
+status=$(call ro_criar_folga_campo_com_distancia '{"p_solicitacao":{"id":"00000000-0000-0000-0000-000000000955","funcionario_id":"00000000-0000-0000-0000-000000000102","obra_id":"00000000-0000-0000-0000-000000000201","motivo":"folga_campo","data_ida":"2027-12-04"},"p_documentos":[],"p_distancia_declarada_km":220,"p_confirma_retorno":false}')
+test "$status" = 400
+grep -q FOLGA_CAMPO_TEMPORARIAMENTE_SUSPENSA /tmp/c2-response.json
+status=$(call ro_criar_solicitacao_com_aprovador '{"p_solicitacao":{"id":"00000000-0000-0000-0000-000000000956","funcionario_id":"00000000-0000-0000-0000-000000000102","obra_id":"00000000-0000-0000-0000-000000000201","motivo":"ferias","data_ida":"2027-12-05"},"p_documentos":[]}')
+test "$status" = 200
+psql -X -v ON_ERROR_STOP=1 -c "update ro_private.folga_suspensao_criacao set ativo=false where chave='novas_folgas_campo'"
+echo 'C2_SUSPENSAO_SELETIVA_SERVIDOR_E_REVERSAO_OK'
