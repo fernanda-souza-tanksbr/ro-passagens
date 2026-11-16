@@ -25,7 +25,7 @@ echo "C2 HTTP status=$status resposta=$(cat /tmp/c2-response.json)"
 echo "C2 HTTP checkpoint status=$status resposta=$(cat /tmp/c2-response.json)"
 test "$status" = 200
 grep -Eq '"estado"[[:space:]]*:[[:space:]]*"informar"' /tmp/c2-response.json
-status=$(call ro_criar_folga_campo_com_distancia '{"p_solicitacao":{"id":"00000000-0000-0000-0000-000000000951","funcionario_id":"00000000-0000-0000-0000-000000000101","obra_id":"00000000-0000-0000-0000-000000000201","motivo":"folga_campo","data_ida":"2027-12-01"},"p_documentos":[],"p_distancia_km":220,"p_confirmacao_retorno":false}')
+status=$(call ro_criar_folga_campo_com_distancia '{"p_solicitacao":{"id":"00000000-0000-0000-0000-000000000951","funcionario_id":"00000000-0000-0000-0000-000000000101","obra_id":"00000000-0000-0000-0000-000000000201","motivo":"folga_campo","data_ida":"2027-12-01"},"p_documentos":[],"p_distancia_declarada_km":220,"p_confirma_retorno":false}')
 echo "C2 HTTP checkpoint status=$status resposta=$(cat /tmp/c2-response.json)"
 test "$status" = 200
 grep -q '00000000-0000-0000-0000-000000000951' /tmp/c2-response.json
