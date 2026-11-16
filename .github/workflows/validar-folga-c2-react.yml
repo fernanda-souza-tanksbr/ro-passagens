@@ -8,6 +8,7 @@ on:
       - 'public/folga-campo-release.json'
       - 'vercel.json'
       - 'tests/c2-real/**'
+      - '.github/workflows/folga-c2-servicos-reais.yml'
       - 'tests/e2e/folgaCampoReactIntegrado.spec.ts'
       - '.github/workflows/validar-folga-c2-react.yml'
   workflow_dispatch:
