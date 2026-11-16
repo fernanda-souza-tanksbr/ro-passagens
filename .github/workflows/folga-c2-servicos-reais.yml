@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/folga-c2-servicos-reais.yml'
       - 'tests/c2-real/**'
+      - 'docs/implantacao/folga-campo-c2-suspensao-seletiva-RASCUNHO.sql'
       - 'docs/implantacao/folga-campo-c2-baseline-minimo-e-limites.md'
   workflow_dispatch:
 permissions:
@@ -49,6 +50,7 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f docs/implantacao/folga-campo-etapa-b-coordenada-RASCUNHO.sql
           psql -X -v ON_ERROR_STOP=1 -f docs/implantacao/folga-campo-etapa-c1-permissoes-RASCUNHO.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/c2-real/postgrest-bootstrap.sql
+          psql -X -v ON_ERROR_STOP=1 -f docs/implantacao/folga-campo-c2-suspensao-seletiva-RASCUNHO.sql
       - name: Iniciar PostgREST real em container temporario
         run: |
           set -euo pipefail
