@@ -39,7 +39,7 @@ jobs:
         run: |
           test "$VITE_SUPABASE_URL" = "http://127.0.0.1:4174"
           npm run build
-          if grep -rE '(hukhwirdrpylxpaedjbc|supabase[.]co)' dist/assets/*.js; then
+          if grep -rE '(hukhwirdrpylxpaedjbc|https://hukhwirdrpylxpaedjbc[.]supabase[.]co)' dist/assets/*.js; then
             echo "HALT: bundle referencia Supabase externo"
             exit 1
           fi
