@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/folga-c2-servicos-reais.yml'
       - 'tests/c2-real/**'
+      - 'docs/implantacao/folga-campo-c2-baseline-minimo-e-limites.md'
   workflow_dispatch:
 permissions:
   contents: read
