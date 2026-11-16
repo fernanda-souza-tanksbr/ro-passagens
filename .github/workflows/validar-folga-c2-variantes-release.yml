@@ -1,0 +1,61 @@
+name: Validar variantes de release C2 (sem deploy)
+on:
+  push:
+    branches: [feat/folga-campo-regimes-distancia]
+    paths:
+      - '.github/workflows/validar-folga-c2-variantes-release.yml'
+      - 'docs/implantacao/folga-campo-c2-publicacao-coordenada.md'
+      - 'src/folgaCampoFeatureConfig.ts'
+      - 'src/folgaCampoVersao.ts'
+      - 'public/folga-campo-release.json'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  variantes:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - modo: legado
+            enabled: ''
+          - modo: transicao
+            enabled: ''
+          - modo: distancia
+            enabled: C2_PRODUCAO_APROVADA
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Build variante isolada
+        env:
+          MODO: ${{ matrix.modo }}
+          VITE_FOLGA_CAMPO_KM_ENABLED: ${{ matrix.enabled }}
+        run: |
+          set -euo pipefail
+          printf '{"modo":"%s","versao_minima":2}\n' "$MODO" > public/folga-campo-release.json
+          npm run build
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import crypto from 'node:crypto';
+          const manifest=JSON.parse(fs.readFileSync('dist/folga-campo-release.json','utf8'));
+          if(manifest.modo!==process.env.MODO || manifest.versao_minima!==2) process.exit(1);
+          if(!fs.existsSync('dist/index.html')) process.exit(1);
+          const sha=crypto.createHash('sha256').update(fs.readFileSync('dist/folga-campo-release.json')).digest('hex');
+          console.log(JSON.stringify({commit:process.env.GITHUB_SHA,mode:manifest.modo,flag:process.env.VITE_FOLGA_CAMPO_KM_ENABLED?'enabled':'disabled',manifest_sha256:sha}));
+          JS
+      - name: Teste de configuracao da flag
+        env:
+          MODO: ${{ matrix.modo }}
+          VITE_FOLGA_CAMPO_KM_ENABLED: ${{ matrix.enabled }}
+        run: |
+          node --experimental-strip-types --input-type=module <<'JS'
+          import { fluxoFolgaDistanciaHabilitado } from './src/folgaCampoFeatureConfig.ts';
+          const actual=fluxoFolgaDistanciaHabilitado(process.env.VITE_FOLGA_CAMPO_KM_ENABLED);
+          if(actual !== (process.env.MODO==='distancia')) process.exit(1);
+          JS
