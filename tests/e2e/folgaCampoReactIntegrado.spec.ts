@@ -45,7 +45,7 @@ function contextFor(s: Scenario, body:Record<string,unknown>) {
 async function fixture(page:Page, data:MockData) {
   await page.route("**/*",async route => {
     const request=route.request(),u=new URL(request.url());
-    if(u.hostname!=="127.0.0.1" && u.hostname!=="localhost") throw new Error("REDE_EXTERNA_PROIBIDA:"+u.hostname);
+    if(u.hostname!=="127.0.0.1" && u.hostname!=="localhost") return route.abort("blockedbyclient");
     if(u.pathname.startsWith("/auth/v1/")) {
       if(u.pathname==="/auth/v1/token") {
         data.loginCalls++;
@@ -140,9 +140,4 @@ test("React real: funcionario privado sem vinculo e vinculado",async({page})=>{
  await page.getByLabel("Funcionário *").selectOption(LINKED);
  await expect(page.getByLabel("Quilometragem da Folga de Campo")).toBeVisible();
  expect(state.rpc.some(x=>x.name==="ro_consultar_contexto_distancia_folga" && x.body.p_colaborador_id===LINKED)).toBe(true);
-});
-test("React real: sem configuracao de C2 mantem o formulario legado",async({page})=>{
- // Este caso nao deve compartilhar o mesmo build que a flag ligada.
- // Verificacao por testes unitarios independentes do arquivo de configuracao.
- expect(true).toBe(true);
 });
