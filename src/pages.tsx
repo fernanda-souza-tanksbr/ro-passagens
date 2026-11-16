@@ -1079,6 +1079,15 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
   const [form, setForm] = useState(emptyNovaSolicitacaoForm);
   const [draftReady, setDraftReady] = useState(false);
   const [privateReady, setPrivateReady] = useState(false);
+  const [avisoVersaoFolga, setAvisoVersaoFolga] = useState("");
+  useEffect(() => {
+    if (form.motivo !== "folga_campo") { setAvisoVersaoFolga(""); return; }
+    let active = true;
+    void checarVersaoFolga(VERSAO_FORMULARIO_FOLGA, NOVO_FLUXO_FOLGA_ATIVO).then(resultado => {
+      if (active) setAvisoVersaoFolga(resultado.ok ? "" : resultado.mensagem);
+    });
+    return () => { active = false; };
+  }, [form.motivo]);
   const [privateRef, setPrivateRef] = useState<string>(() => crypto.randomUUID());
   const restoredDraftRef = useRef(false);
   const draftPixRestoredRef = useRef(false);
@@ -1348,7 +1357,7 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
     e.preventDefault();
     setErro("");
     if (form.motivo === "folga_campo") {
-      const compatibilidade = await checarVersaoFolga(VERSAO_FORMULARIO_FOLGA);
+      const compatibilidade = await checarVersaoFolga(VERSAO_FORMULARIO_FOLGA, NOVO_FLUXO_FOLGA_ATIVO);
       if (!compatibilidade.ok) {
         setErro(compatibilidade.mensagem);
         return;
@@ -1404,7 +1413,7 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
     if (calculo.anosPendentes.length) { setErro(`O calendário de dias não úteis de ${calculo.anosPendentes[0]} ainda não foi validado.`); return; }
     if (!window.confirm("Confirmar a criação desta solicitação de passagem? Verifique os dados antes de continuar.")) return;
     if (form.motivo === "folga_campo") {
-      const compatibilidade = await checarVersaoFolga(VERSAO_FORMULARIO_FOLGA);
+      const compatibilidade = await checarVersaoFolga(VERSAO_FORMULARIO_FOLGA, NOVO_FLUXO_FOLGA_ATIVO);
       if (!compatibilidade.ok) { setErro(compatibilidade.mensagem); return; }
     }
     setBusy(true);
@@ -1479,6 +1488,7 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
     >
       <form className="card form" onSubmit={submit} onKeyDown={(event) => { if (event.key === "Enter" && !(event.target instanceof HTMLTextAreaElement)) event.preventDefault(); }}>
         {erro && <div className="error wide">{erro}</div>}
+        {avisoVersaoFolga && form.motivo === "folga_campo" && <div className="alert wide" role="alert">{avisoVersaoFolga} <button type="button" className="btn secondary" onClick={() => window.location.reload()}>Atualizar pagina</button></div>}
         <label>
           Solicitante
           <input value={solicitante} readOnly />
