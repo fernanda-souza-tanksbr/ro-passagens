@@ -23,3 +23,12 @@ begin
 end $$;
 -- Nao conceder SELECT/INSERT/UPDATE direto ao usuario REST.
 revoke all on all tables in schema public from anon,authenticated;
+
+-- Helper de acesso privado presente no fixture C1, nao e copia integral da
+-- funcao operacional. Autoriza somente responsaveis ficticios ativos.
+create or replace function public.ro_can_view_private_addresses(p_user uuid default auth.uid())
+returns boolean language sql stable security definer set search_path=''
+as $$
+ select exists (select 1 from public.ro_responsaveis r where r.user_id=p_user and r.ativo);
+$$;
+revoke execute on function public.ro_can_view_private_addresses(uuid) from public,anon;
