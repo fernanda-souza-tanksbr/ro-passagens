@@ -18,7 +18,7 @@ export function avaliarManifestoFolga(
 ): ResultadoVersao {
   if (!manifesto || typeof manifesto !== "object") return { ok:false, mensagem:MENSAGEM_INDISPONIVEL_FOLGA };
   const valor = manifesto as Partial<ManifestoFolga>;
-  if (!Number.isSafeInteger(valor.versao_minima) || (valor.versao_minima ?? 0) < 1 ||
+  if (typeof valor.versao_minima !== "number" || !Number.isSafeInteger(valor.versao_minima) || (valor.versao_minima ?? 0) < 1 ||
       !["legado","transicao","distancia"].includes(valor.modo ?? "")) {
     return { ok:false, mensagem:MENSAGEM_INDISPONIVEL_FOLGA };
   }
