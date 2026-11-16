@@ -97,8 +97,8 @@ async function fixture(page:Page, data:MockData) {
 async function login(page:Page) {
   await page.goto(HOST+"/nova");
   await expect(page.getByText("Portal Tanks BR")).toBeVisible();
-  await page.getByPlaceholder("E-mail").fill("teste@exemplo.invalid");
-  await page.getByPlaceholder("Senha").fill("senha-ficticia");
+  await page.getByLabel("E-mail").fill("teste@exemplo.invalid");
+  await page.getByLabel("Senha").fill("senha-ficticia");
   await page.getByRole("button",{name:"Entrar",exact:true}).last().click();
   await expect(page.getByText("Nova solicitação")).toBeVisible({timeout:10000});
 }
