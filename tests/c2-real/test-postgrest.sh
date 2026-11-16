@@ -22,7 +22,7 @@ psql -X -v ON_ERROR_STOP=1 -c "update ro_private.folga_configuracao set ativo=tr
 status=$(call ro_consultar_contexto_distancia_folga '{"p_funcionario_id":"00000000-0000-0000-0000-000000000101","p_obra_id":"00000000-0000-0000-0000-000000000201"}')
 echo "C2 HTTP status=$status resposta=$(cat /tmp/c2-response.json)"
 test "$status" = 200
-grep -q '"estado":"informar"' /tmp/c2-response.json
+grep -Eq '"estado"[[:space:]]*:[[:space:]]*"informar"' /tmp/c2-response.json
 status=$(call ro_criar_folga_campo_com_distancia '{"p_solicitacao":{"id":"00000000-0000-0000-0000-000000000951","funcionario_id":"00000000-0000-0000-0000-000000000101","obra_id":"00000000-0000-0000-0000-000000000201","motivo":"folga_campo","data_ida":"2027-12-01"},"p_documentos":[],"p_distancia_km":220,"p_confirmacao_retorno":false}')
 test "$status" = 200
 grep -q '00000000-0000-0000-0000-000000000951' /tmp/c2-response.json
