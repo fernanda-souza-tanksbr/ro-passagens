@@ -149,3 +149,35 @@ test("React real: funcionario privado sem vinculo e vinculado",async({page})=>{
  await expect(page.getByLabel("Quilometragem da Folga de Campo")).toBeVisible();
  expect(state.rpc.some(x=>x.name==="ro_consultar_contexto_distancia_folga" && x.body.p_colaborador_id===LINKED)).toBe(true);
 });
+
+test("React real: aviso de transicao somente na Folga de Campo",async({page})=>{
+ const state:MockData={rpc:[],loginCalls:0,data:"first",activated:false,writes:0};
+ await fixture(page,state);
+ await page.route("**/folga-campo-release.json",route=>route.fulfill({
+   status:200,contentType:"application/json",
+   body:JSON.stringify({modo:"transicao",versao_minima:2})
+ }));
+ await login(page);
+ await page.getByLabel("Funcionário *").selectOption(FUNC);
+ await page.getByLabel("Motivo *").selectOption("folga_campo");
+ await expect(page.getByRole("alert").filter({hasText:"temporariamente suspensa"})).toBeVisible();
+ await expect(page.getByRole("button",{name:"Atualizar pagina"})).toBeVisible();
+ await page.getByLabel("Motivo *").selectOption("ferias");
+ await expect(page.getByRole("alert").filter({hasText:"temporariamente suspensa"})).toHaveCount(0);
+ expect(state.writes).toBe(0);
+});
+test("React real: cliente desatualizado recebe solicitacao de atualizacao",async({page})=>{
+ const state:MockData={rpc:[],loginCalls:0,data:"first",activated:false,writes:0};
+ await fixture(page,state);
+ await page.route("**/folga-campo-release.json",route=>route.fulfill({
+   status:200,contentType:"application/json",
+   body:JSON.stringify({modo:"distancia",versao_minima:3})
+ }));
+ await login(page);
+ await page.getByLabel("Funcionário *").selectOption(FUNC);
+ await page.getByLabel("Motivo *").selectOption("folga_campo");
+ await expect(page.getByRole("alert").filter({hasText:"Atualize a pagina"})).toBeVisible();
+ await page.getByLabel("Motivo *").selectOption("ferias");
+ await expect(page.getByRole("alert").filter({hasText:"Atualize a pagina"})).toHaveCount(0);
+ expect(state.writes).toBe(0);
+});
