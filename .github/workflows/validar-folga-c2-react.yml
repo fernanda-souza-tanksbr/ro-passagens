@@ -5,6 +5,9 @@ on:
       - feat/folga-campo-regimes-distancia
     paths:
       - 'src/**'
+      - 'public/folga-campo-release.json'
+      - 'vercel.json'
+      - 'tests/c2-real/**'
       - 'tests/e2e/folgaCampoReactIntegrado.spec.ts'
       - '.github/workflows/validar-folga-c2-react.yml'
   workflow_dispatch:
