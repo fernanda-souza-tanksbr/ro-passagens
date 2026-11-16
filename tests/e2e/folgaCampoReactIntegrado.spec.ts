@@ -13,7 +13,7 @@ const LINKED = "00000000-0000-0000-0000-000000000702";
 const CC_A = "00000000-0000-0000-0000-000000000201";
 const CC_B = "00000000-0000-0000-0000-000000000202";
 const STAFF = [
-  { id: FUNC, funcionario_id: FUNC, nome: "Funcionário Fictício", obra_id: CC_A },
+  { id: FUNC, funcionario_id: FUNC, nome: "Funcionário Fictício", obra_id: CC_A, visivel_obras_control: true },
   { id: PRIVATE, funcionario_id: null, nome: "Colaborador Privado Fictício", obra_id: CC_A },
   { id: LINKED, funcionario_id: FUNC, nome: "Colaborador Vinculado Fictício", obra_id: CC_A }
 ];
@@ -59,7 +59,7 @@ async function fixture(page:Page, data:MockData) {
     }
     if(u.pathname.startsWith("/rest/v1/")) {
       let body:Record<string,unknown>={};
-      try{body=request.postDataJSON() as Record<string,unknown>}catch{}
+      try{body=(request.postDataJSON() ?? {}) as Record<string,unknown>}catch{}
       const name=u.pathname.split("/").pop()||"";
       const rpc=name.startsWith("ro_") && u.pathname.includes("/rpc/");
       if(rpc)data.rpc.push({name,body});
@@ -77,7 +77,7 @@ async function fixture(page:Page, data:MockData) {
         ro_obter_destino_residencial_resumido:{possui_endereco:false,cidade:null,uf:null},
         ro_obter_destino_colaborador_resumido:{possui_endereco:false,cidade:null,uf:null},
         ro_ultimo_pix_viajante:null,
-        ro_consultar_contexto_distancia_folga:contextFor(data.data,body),
+        ro_consultar_contexto_distancia_folga:null,
         ro_obter_ciclo_folga_funcionario:{possui_historico:false,solicitacao_futura_existente_id:null},
       };
       if(name==="ro_criar_folga_campo_com_distancia"||name==="ro_criar_solicitacao_com_aprovador"){
@@ -86,7 +86,7 @@ async function fixture(page:Page, data:MockData) {
         return route.fulfill({status:200,contentType:"application/json",body:JSON.stringify("00000000-0000-0000-0000-000000000900")});
       }
       if(!Object.hasOwn(results,name))throw new Error("REST_NAO_SIMULADO:"+name);
-      const value=results[name];
+      const value=name==="ro_consultar_contexto_distancia_folga" ? contextFor(data.data,body) : results[name];
       return route.fulfill({status:200,headers:{"content-type":"application/json","access-control-allow-origin":"*"},body:JSON.stringify(value)});
     }
     if(u.pathname.startsWith("/storage/v1/")||u.pathname.startsWith("/functions/v1/"))throw new Error("SAIDA_NAO_AUTORIZADA:"+u.pathname);
@@ -107,6 +107,7 @@ test("React real: login pelo SDK, redirecionamento e selecao do formulario",asyn
   await fixture(page,state);await login(page);
   expect(state.loginCalls).toBe(1);
   await expect(page.getByText("Funcionário *")).toBeVisible();
+  await expect(page.getByLabel("Funcionário *").locator(`option[value="${FUNC}"]`)).toHaveCount(1);
   await page.getByLabel("Funcionário *").selectOption(FUNC);
   await page.getByLabel("Motivo *").selectOption("folga_campo");
   await expect(page.getByLabel("Quilometragem da Folga de Campo")).toBeVisible();
@@ -132,11 +133,13 @@ for(const [scenario,expected] of [
 test("React real: funcionario privado sem vinculo e vinculado",async({page})=>{
  const state:MockData={rpc:[],loginCalls:0,data:"private",activated:false,writes:0};
  await fixture(page,state);await login(page);
+ await expect(page.getByLabel("Funcionário *").locator(`option[value="${PRIVATE}"]`)).toHaveCount(1);
  await page.getByLabel("Funcionário *").selectOption(PRIVATE);
  await page.getByLabel("Motivo *").selectOption("folga_campo");
  await expect(page.getByLabel("Quilometragem da Folga de Campo")).toBeVisible();
  expect(state.rpc.some(x=>x.name==="ro_consultar_contexto_distancia_folga" && x.body.p_colaborador_id===PRIVATE)).toBe(true);
  state.data="linked";
+ await expect(page.getByLabel("Funcionário *").locator(`option[value="${LINKED}"]`)).toHaveCount(1);
  await page.getByLabel("Funcionário *").selectOption(LINKED);
  await expect(page.getByLabel("Quilometragem da Folga de Campo")).toBeVisible();
  expect(state.rpc.some(x=>x.name==="ro_consultar_contexto_distancia_folga" && x.body.p_colaborador_id===LINKED)).toBe(true);
