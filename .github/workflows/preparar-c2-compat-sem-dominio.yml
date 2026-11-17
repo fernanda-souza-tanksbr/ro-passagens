@@ -58,14 +58,67 @@ jobs:
           mkdir -p .vercel
           printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
           vercel pull --yes --environment=production --scope tanks
-      - name: Construir COMPAT sem habilitar nova Folga
+      - name: Construir COMPAT com Supabase explicitamente carregado
         env:
           VITE_FOLGA_CAMPO_KM_ENABLED: ''
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        shell: bash
         run: |
           set -euo pipefail
+          # vercel pull writes production build variables here; the CLI build
+          # must inherit them explicitly rather than relying on implicit loading.
+          test -f .vercel/.env.production.local
+          set -a
+          source .vercel/.env.production.local
+          set +a
+          export VITE_FOLGA_CAMPO_KM_ENABLED=''
+          node --input-type=module <<'NODE'
+          if(process.env.VITE_FOLGA_CAMPO_KM_ENABLED !== '') throw Error('Incorrect C2 build flag');
+          const required=['VITE_SUPABASE_URL','VITE_SUPABASE_PUBLISHABLE_KEY','VITE_SUPABASE_PROJECT_ID'];
+          for(const name of required) {
+            const value=process.env[name]?.trim();
+            if(!value || value==='undefined' || value==='null' || value.includes('placeholder')) {
+              console.error('Missing or invalid public build variable: '+name);
+              process.exitCode=1;
+            }
+          }
+          const url=process.env.VITE_SUPABASE_URL;
+          if(url) {
+            try {
+              const parsed=new URL(url);
+              if(!['https:','http:'].includes(parsed.protocol) || !parsed.hostname ||
+                 parsed.username || parsed.password || parsed.search || parsed.hash ||
+                 parsed.pathname!=='/' ||
+                 parsed.hostname!==process.env.VITE_SUPABASE_PROJECT_ID+'.supabase.co') {
+                throw Error('Invalid Supabase project URL');
+              }
+            } catch {
+              console.error('Invalid VITE_SUPABASE_URL for the selected Supabase project');
+              process.exitCode=1;
+            }
+          }
+          NODE
+          test -n "${VITE_SUPABASE_URL:-}"
+          test -n "${VITE_SUPABASE_PUBLISHABLE_KEY:-}"
+          test -n "${VITE_SUPABASE_PROJECT_ID:-}"
           vercel build --prod --scope tanks
-          node --input-type=module -e "import fs from 'node:fs';const x=JSON.parse(fs.readFileSync('.vercel/output/static/folga-campo-release.json'));if(x.modo!=='legado'||x.versao_minima!==2)process.exit(1)"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const root='.vercel/output/static';
+          const manifest=JSON.parse(fs.readFileSync(path.join(root,'folga-campo-release.json')));
+          if(manifest.modo!=='legado' ||
+             manifest.versao_minima!==2) throw Error('Invalid release manifest');
+          const bundles=fs.readdirSync(path.join(root,'assets'))
+            .filter(name=>name.endsWith('.js'))
+            .map(name=>fs.readFileSync(path.join(root,'assets',name),'utf8'));
+          const contains=value=>bundles.some(js=>js.includes(value));
+          if(!contains(process.env.VITE_SUPABASE_URL) ||
+             !contains(process.env.VITE_SUPABASE_PUBLISHABLE_KEY)) {
+            throw Error('Supabase public configuration not embedded in JavaScript bundle');
+          }
+          console.log('Public Supabase URL/key and release manifest verified in build (values hidden)');
+          NODE
       - name: Preparar deployment sem atribuir dominios
         id: stage
         env:
