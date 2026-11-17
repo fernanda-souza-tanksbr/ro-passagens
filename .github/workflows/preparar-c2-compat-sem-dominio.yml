@@ -1,0 +1,85 @@
+name: Preparar C2 COMPAT sem dominios (manual)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: c2-compat-preparacao
+  cancel-in-progress: false
+jobs:
+  preparar-compat:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      VERCEL_TELEMETRY_DISABLED: '1'
+      VERCEL_CLI_VERSION: '63.1.2'
+      SOURCE_SHA: fad6f30497eb807695510ff73daad1ef913554dd
+    steps:
+      - name: Verificar alvo e variaveis sem exibir valores
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VERCEL_ORG_ID"
+          test -n "$VERCEL_PROJECT_ID"
+          test "$VERCEL_ORG_ID" = "team_SqKFvMyAmjRyfIDwxZqJMJj3"
+          test "$VERCEL_PROJECT_ID" = "prj_wkU8FwnRO2QqWzHfygeXUC289Jgs"
+      - name: Checkout exclusivo do commit revisado
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: fad6f30497eb807695510ff73daad1ef913554dd
+          persist-credentials: false
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Instalar CLI fixa e dependencias revisadas
+        run: |
+          set -euo pipefail
+          npm install --global "vercel@${VERCEL_CLI_VERSION}"
+          test "$(vercel --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)" = "$VERCEL_CLI_VERSION"
+          npm ci --ignore-scripts
+      - name: Preparar manifesto COMPAT e verificar configuracao
+        env:
+          VITE_FOLGA_CAMPO_KM_ENABLED: ''
+        run: |
+          set -euo pipefail
+          printf '{"modo":"legado","versao_minima":2}\n' > public/folga-campo-release.json
+          node --input-type=module -e "import fs from 'node:fs';const x=JSON.parse(fs.readFileSync('public/folga-campo-release.json'));if(x.modo!=='legado'||x.versao_minima!==2||process.env.VITE_FOLGA_CAMPO_KM_ENABLED!=='')process.exit(1)"
+      - name: Vincular projeto e obter configuracao de producao
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$VERCEL_TOKEN"
+          mkdir -p .vercel
+          printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
+          vercel pull --yes --environment=production --scope tanks
+      - name: Construir COMPAT sem habilitar nova Folga
+        env:
+          VITE_FOLGA_CAMPO_KM_ENABLED: ''
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          vercel build --prod --scope tanks
+          node --input-type=module -e "import fs from 'node:fs';const x=JSON.parse(fs.readFileSync('.vercel/output/static/folga-campo-release.json'));if(x.modo!=='legado'||x.versao_minima!==2)process.exit(1)"
+      - name: Preparar deployment sem atribuir dominios
+        id: stage
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          url="$(vercel deploy --prebuilt --prod --skip-domain --scope tanks)"
+          DEPLOYMENT_URL="$url" node --input-type=module -e "const u=new URL(process.env.DEPLOYMENT_URL);if(u.protocol!=='https:'||!u.hostname.endsWith('.vercel.app'))process.exit(1)"
+          printf 'deployment_url=%s\n' "$url" >> "$GITHUB_OUTPUT"
+          printf 'Deployment COMPAT preparado sem promocao: %s\n' "$url"
+      - name: Registrar URL e commit (sem promocao)
+        env:
+          DEPLOYMENT_URL: ${{ steps.stage.outputs.deployment_url }}
+        run: |
+          printf 'Commit revisado: %s\n' "$SOURCE_SHA"
+          printf 'Modo: legado; flag: desativada; alvo: production; dominios: skip-domain\n'
+          printf 'Inspecionar deployment e aliases antes de qualquer etapa seguinte: %s\n' "$DEPLOYMENT_URL"
