@@ -85,7 +85,13 @@ jobs:
           set -a
           source .vercel/.env.production.local
           set +a
+          case "$VARIANTE" in
+            DISTANCIA) export VITE_FOLGA_CAMPO_KM_ENABLED='C2_PRODUCAO_APROVADA' ;;
+            TRANSICAO) export VITE_FOLGA_CAMPO_KM_ENABLED='' ;;
+            *) echo 'Unknown C2 variant' >&2; exit 1 ;;
+          esac
           node --input-type=module <<'NODE'
+          if(process.env.VITE_FOLGA_CAMPO_KM_ENABLED !== (process.env.VARIANTE==='DISTANCIA'?'C2_PRODUCAO_APROVADA':'')) throw Error('Incorrect C2 build flag');
           const required=['VITE_SUPABASE_URL','VITE_SUPABASE_PUBLISHABLE_KEY','VITE_SUPABASE_PROJECT_ID'];
           for(const name of required) {
             const value=process.env[name]?.trim();
