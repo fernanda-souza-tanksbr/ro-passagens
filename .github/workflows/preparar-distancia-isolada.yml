@@ -16,10 +16,11 @@ jobs:
     env:
       VERCEL_ORG_ID: team_SqKFvMyAmjRyfIDwxZqJMJj3
       VERCEL_PROJECT_ID: prj_wkU8FwnRO2QqWzHfygeXUC289Jgs
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       APPROVED_SHA: 14de85b0670c4be12faa9fa03c49abed23c438f2
     steps:
       - name: Check secret availability (no value disclosure)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
@@ -43,6 +44,8 @@ jobs:
         shell: bash
         run: npm install --global vercel@48.10.2
       - name: Link to existing Tanks project and pull production settings
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
@@ -63,6 +66,8 @@ jobs:
           console.log('Validated production Supabase project ID, URL and presence of client key (values redacted).');
           NODE
       - name: Build approved source with production VITE variables
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
@@ -82,6 +87,7 @@ jobs:
       - name: Verify READY, approved SHA marker, and zero operational aliases
         shell: bash
         env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
         run: |
           set -euo pipefail
