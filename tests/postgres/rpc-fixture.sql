@@ -1,6 +1,6 @@
 -- Isolated, synthetic records; these structures enforce real authorization function predicates.
 CREATE SCHEMA IF NOT EXISTS storage;
-CREATE TABLE IF NOT EXISTS auth.users (id uuid PRIMARY KEY, deleted_at timestamptz, banned_until timestamptz);
+CREATE TABLE IF NOT EXISTS auth.users (id uuid PRIMARY KEY, email text, deleted_at timestamptz, banned_until timestamptz);
 INSERT INTO auth.users(id) VALUES ('00000000-0000-0000-0000-000000000001');
 CREATE TABLE IF NOT EXISTS public.user_roles (user_id uuid NOT NULL, role text NOT NULL);
 CREATE TABLE IF NOT EXISTS public.ro_folga_alocacoes (
@@ -53,3 +53,23 @@ ALTER TABLE public.ro_passagem_solicitacoes
  ADD COLUMN IF NOT EXISTS prazo_excecao boolean;
 -- Authorization, cost-center, approval and operational helpers are NOT stubbed here.
 -- They must be loaded from their actual production definitions before running RPC calls.
+
+CREATE TABLE IF NOT EXISTS public.funcionarios (
+ id uuid PRIMARY KEY, nome text, ativo boolean DEFAULT true, deleted_at timestamptz,
+ visivel_passagens boolean DEFAULT true, escopo_passagens text DEFAULT 'comum');
+CREATE TABLE IF NOT EXISTS public.obras (
+ id uuid PRIMARY KEY, nome text, visivel_passagens boolean DEFAULT true,
+ escopo_passagens text DEFAULT 'comum');
+CREATE TABLE IF NOT EXISTS public.ro_responsaveis (user_id uuid, ativo boolean DEFAULT true);
+CREATE TABLE IF NOT EXISTS public.ro_rh_responsaveis (user_id uuid, ativo boolean DEFAULT true);
+CREATE TABLE IF NOT EXISTS public.ro_passagem_notificacoes (
+ solicitacao_id uuid, canal text, destinatario_tipo text, destinatario text, mensagem text);
+ALTER TABLE public.ro_funcionarios_enderecos_privados ADD COLUMN IF NOT EXISTS nome text;
+ALTER TABLE public.ro_passagem_solicitacoes ADD COLUMN IF NOT EXISTS viajante_nome_informado text;
+INSERT INTO public.funcionarios(id,nome) VALUES
+ ('00000000-0000-0000-0000-000000000801','Funcionario Ficticio A'),
+ ('00000000-0000-0000-0000-000000000802','Funcionario Ficticio B');
+INSERT INTO public.obras(id,nome) VALUES
+ ('00000000-0000-0000-0000-000000000899','Obra Ficticia');
+INSERT INTO public.user_roles(user_id,role) VALUES
+ ('00000000-0000-0000-0000-000000000001','coordenador');
