@@ -98,6 +98,58 @@ jobs:
           set -euo pipefail
           psql -X -v ON_ERROR_STOP=1 -f tests/postgres/rpc-integration.sql
           echo 'PASS: ro_criar_folga_campo_com_distancia invocada com sucesso' >> "$GITHUB_STEP_SUMMARY"
+      - name: Regressoes 14 45 90 dias pela RPC
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f tests/postgres/rpc-legacy-regimes.sql
+          echo 'PASS: RPC legacy regimes 14, 45 and 90 days' >> "$GITHUB_STEP_SUMMARY"
+      - name: Concorrencia pela RPC real
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -c "INSERT INTO public.funcionarios(id,nome) VALUES ('00000000-0000-0000-0000-000000000871','Funcionario ficticio concorrencia RPC')"
+          cat > /tmp/rpc-concurrent-one.sql <<'SQL'
+          BEGIN;
+          SELECT public.ro_criar_folga_campo_com_distancia(
+            jsonb_build_object('id','00000000-0000-0000-0000-000000003701','motivo','folga_campo',
+              'funcionario_id','00000000-0000-0000-0000-000000000871',
+              'obra_id','00000000-0000-0000-0000-000000000899',
+              'data_ida',(current_date+220)::text,'pix_viajante','PIX-FICTICIO',
+              'origem','Origem ficticia','destino','Destino ficticio',
+              'aprovador_id','00000000-0000-0000-0000-000000000001'),
+            '[]'::jsonb,100,false);
+          SELECT pg_sleep(3);
+          COMMIT;
+          SQL
+          cat > /tmp/rpc-concurrent-two.sql <<'SQL'
+          BEGIN;
+          SELECT public.ro_criar_folga_campo_com_distancia(
+            jsonb_build_object('id','00000000-0000-0000-0000-000000003702','motivo','folga_campo',
+              'funcionario_id','00000000-0000-0000-0000-000000000871',
+              'obra_id','00000000-0000-0000-0000-000000000899',
+              'data_ida',(current_date+220)::text,'pix_viajante','PIX-FICTICIO',
+              'origem','Origem ficticia','destino','Destino ficticio',
+              'aprovador_id','00000000-0000-0000-0000-000000000001'),
+            '[]'::jsonb,100,false);
+          COMMIT;
+          SQL
+          psql -X -v ON_ERROR_STOP=1 -f /tmp/rpc-concurrent-one.sql > /tmp/rpc-one.log 2>&1 & pid1=$!
+          sleep 1
+          psql -X -v ON_ERROR_STOP=1 -f /tmp/rpc-concurrent-two.sql > /tmp/rpc-two.log 2>&1 & pid2=$!
+          set +e
+          wait "$pid1"; result1=$?
+          wait "$pid2"; result2=$?
+          set -e
+          if [ "$result1" -ne 0 ] || [ "$result2" -eq 0 ]; then
+            echo 'FAIL RPC concurrency: unexpected transaction results'
+            cat /tmp/rpc-one.log /tmp/rpc-two.log
+            exit 1
+          fi
+          grep -q 'FOLGA_FUTURA_DUPLICADA' /tmp/rpc-two.log
+          test "$(psql -XAt -c "select count(*) from public.ro_passagem_solicitacoes where funcionario_id='00000000-0000-0000-0000-000000000871'")" = 1
+          echo 'PASS RPC concurrency: one committed and one rejected'
+          echo 'PASS: two simultaneous RPC calls, exactly one committed' >> "$GITHUB_STEP_SUMMARY"
       - name: Rollback e comparacao de definicoes
         if: always()
         shell: bash
