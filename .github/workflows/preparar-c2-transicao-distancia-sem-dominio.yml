@@ -102,26 +102,36 @@ jobs:
           }
           const url=process.env.VITE_SUPABASE_URL;
           if(url) {
+            // Only new URL() belongs to the parsing catch. Never log raw values.
+            let parsed;
             try {
-              const parsed=new URL(url);
-              const checks=[
-                ['protocol', ['https:','http:'].includes(parsed.protocol)],
-                ['hostname_present', Boolean(parsed.hostname)],
-                ['credentials_absent', !parsed.username && !parsed.password],
-                ['query_and_fragment_absent', !parsed.search && !parsed.hash],
-                ['root_path', parsed.pathname==='/'],
-                ['hostname_matches_project_id', parsed.hostname===process.env.VITE_SUPABASE_PROJECT_ID+'.supabase.co'],
-                ['expected_project_id', process.env.VITE_SUPABASE_PROJECT_ID==='hukhwirdrpylxpaedjbc'],
-                ['no_surrounding_whitespace', url===url.trim()],
-              ];
-              const failed=checks.filter(([,passed])=>!passed).map(([name])=>name);
-              if(failed.length) {
-                console.error('Supabase URL validation failed checks: '+failed.join(', '));
-                process.exitCode=1;
-              }
-            } catch {
-              console.error('Supabase URL validation failed check: URL_parse');
-              process.exitCode=1;
+              parsed=new URL(url);
+            } catch (error) {
+              const category =
+                url.trim().length===0 ? 'empty_or_whitespace' :
+                /^['"]|['"]$/.test(url) ? 'literal_quotes' :
+                /^\\\\?["']|\\\\["']/.test(url) ? 'escape_characters' :
+                /^(\\$\\{|\\$[A-Za-z_]|\\{\\{)/.test(url) ? 'unresolved_reference' :
+                /[\\r\\n\\t]/.test(url) ? 'control_characters' :
+                /^https?:\\/\\//i.test(url.trim()) ? 'malformed_http_url' :
+                'not_http_url_or_other_invalid_format';
+              console.error('Supabase URL parsing failed; safe category: '+category);
+              process.exit(1);
+            }
+            const checks=[
+              ['protocol', ['https:','http:'].includes(parsed.protocol)],
+              ['hostname_present', Boolean(parsed.hostname)],
+              ['credentials_absent', !parsed.username && !parsed.password],
+              ['query_and_fragment_absent', !parsed.search && !parsed.hash],
+              ['root_path', parsed.pathname==='/'],
+              ['hostname_matches_project_id', parsed.hostname===process.env.VITE_SUPABASE_PROJECT_ID+'.supabase.co'],
+              ['expected_project_id', process.env.VITE_SUPABASE_PROJECT_ID==='hukhwirdrpylxpaedjbc'],
+              ['no_surrounding_whitespace', url===url.trim()],
+            ];
+            const failed=checks.filter(([,passed])=>!passed).map(([name])=>name);
+            if(failed.length) {
+              console.error('Supabase URL validation failed checks: '+failed.join(', '));
+              process.exit(1);
             }
           }
           NODE
