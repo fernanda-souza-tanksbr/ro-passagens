@@ -2,7 +2,7 @@
 -- No production data or credentials. The trigger itself is loaded unchanged from SQL files.
 CREATE SCHEMA IF NOT EXISTS auth;
 CREATE SCHEMA IF NOT EXISTS ro_private;
-CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT '00000000-0000-0000-0000-000000000001'::uuid $$;
+CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $ SELECT coalesce(nullif(current_setting('request.jwt.claim.sub',true),'')::uuid,'00000000-0000-0000-0000-000000000001'::uuid) $;
 CREATE TABLE public.ro_funcionarios_enderecos_privados (id uuid PRIMARY KEY, funcionario_id uuid, ativo boolean NOT NULL DEFAULT true);
 CREATE TABLE ro_private.folga_configuracao (chave text PRIMARY KEY, ativo boolean NOT NULL);
 INSERT INTO ro_private.folga_configuracao VALUES ('novo_fluxo_distancia',true);
