@@ -55,7 +55,9 @@ DO $$ DECLARE d date:=current_date+40; BEGIN
  PERFORM pg_temp.add_folga(602,d,7,'00000000-0000-0000-0000-000000000061');
  PERFORM pg_temp.expect_error('UPDATE ro_passagem_solicitacoes SET status=''solicitada'' WHERE id=''00000000-0000-0000-0000-000000000601''','FOLGA_FUTURA_DUPLICADA');
  PERFORM pg_temp.add_folga(603,d,7,'00000000-0000-0000-0000-000000000063');
+ PERFORM set_config('ro.recusa_rpc','1',true);
  UPDATE ro_passagem_solicitacoes SET status='recusada' WHERE id='00000000-0000-0000-0000-000000000603';
+ PERFORM set_config('ro.recusa_rpc','',true);
  PERFORM pg_temp.expect_error('UPDATE ro_passagem_solicitacoes SET status=''solicitada'' WHERE id=''00000000-0000-0000-0000-000000000603''','SOLICITACAO_RECUSADA_IMUTAVEL');
  RAISE NOTICE 'PASS cancelled/reactivation and refused terminal';
 END $$;
