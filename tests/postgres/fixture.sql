@@ -13,6 +13,9 @@ CREATE TABLE ro_private.folga_criacao_contexto (
 CREATE TABLE public.ro_passagem_solicitacoes (
  id uuid PRIMARY KEY, funcionario_id uuid, colaborador_id uuid, obra_id uuid,
  motivo text NOT NULL DEFAULT 'folga_campo', data_ida date NOT NULL, data_retorno date,
+ recusada_em timestamptz, recusada_por uuid, motivo_recusa text,
+ excluida_por uuid, motivo_exclusao text, updated_at timestamptz,
+ solicitacao_origem_id uuid, solicitante_id uuid,
  retorno_indefinido boolean NOT NULL DEFAULT false, status text NOT NULL DEFAULT 'solicitada',
  aprovacao_status text, excluida_em timestamptz, created_at timestamptz NOT NULL DEFAULT now(),
  folga_antecipacao_justificativa text, folga_data_prevista_ciclo date,
@@ -37,12 +40,4 @@ CREATE FUNCTION public.ro_funcionario_possui_folga_futura_ativa(p_funcionario uu
  AND s.aprovacao_status IS DISTINCT FROM 'reprovada'
  ORDER BY s.data_ida,s.created_at LIMIT 1 $$;
 -- Match the production refusal guard for the tested terminal-status behavior.
-CREATE FUNCTION public.ro_proteger_recusa_terminal() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
- IF TG_OP='UPDATE' AND OLD.status='recusada' THEN
-  RAISE EXCEPTION 'SOLICITACAO_RECUSADA_IMUTAVEL';
- END IF;
- RETURN NEW;
-END $$;
-CREATE TRIGGER ro_proteger_recusa_terminal BEFORE UPDATE ON public.ro_passagem_solicitacoes
- FOR EACH ROW EXECUTE FUNCTION public.ro_proteger_recusa_terminal();
+-- Production refusal function and trigger are loaded from production-dependencies.sql.
