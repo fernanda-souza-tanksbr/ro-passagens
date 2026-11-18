@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Download } from "lucide-react";
 import { Empty, Page, Spinner } from "./components";
 import {
@@ -14,6 +14,7 @@ import { supabase } from "./supabase";
 import { useAutoFinalization } from "./autoFinalization";
 import type { Obra } from "./types";
 import { idsSolicitacoesParaResolver, mapearNomesColaboradoresSolicitacoes, resolveSolicitacaoFuncionarioNome } from "./solicitacaoColaborador";
+import { hasSpecificReportFilters, namesByReportCenter, readReportViewState, writeReportViewState } from "./relatoriosPersistence";
 
 type LinhaRelatorio = Obra & {
   centro_custo_id: string | null;
@@ -75,20 +76,30 @@ const vazio: RelatorioData = {
   resumo: { solicitacoes: 0, compradas: 0, abertas: 0, imprevistos: 0, valor_total: 0, valor_complementar: 0 },
 };
 
-export function Relatorios() {
-  const [filtros, setFiltros] = useState({ inicio: inicioMes, fim: hoje, centro: "", status: "", motivo: "", responsavel: "" });
-  const [aplicados, setAplicados] = useState(filtros);
+export function Relatorios({ userId }: { userId: string }) {
+  const [initial] = useState(() => readReportViewState(userId));
+  const [filtros, setFiltros] = useState(initial.filtros);
+  const [aplicados, setAplicados] = useState(initial.aplicados);
   const [dados, setDados] = useState<RelatorioData>(vazio);
   const [custos, setCustos] = useState<CustoRelatorio[]>([]);
   const [solicitacoesAbertas, setSolicitacoesAbertas] = useState<
     SolicitacaoAbertaRelatorio[]
   >([]);
   const [nomesColaboradores, setNomesColaboradores] = useState<Record<string, string>>({});
-  const [centroSelecionado, setCentroSelecionado] = useState<string>();
+  const [centroSelecionado, setCentroSelecionado] = useState<string | undefined>(initial.centroSelecionado || undefined);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
-  const [ordem, setOrdem] = useState<SortKey>("codigo");
-  const [direcao, setDirecao] = useState<"asc" | "desc">("asc");
+  const [ordem, setOrdem] = useState<SortKey>(initial.ordem);
+  const [direcao, setDirecao] = useState<"asc" | "desc">(initial.direcao);
+  const scrollPosition = useRef(initial.scrollY);
+  useEffect(() => {
+    const persist = () => writeReportViewState(userId, { filtros, aplicados, ordem, direcao, scrollY: scrollPosition.current, centroSelecionado: centroSelecionado || null });
+    const onScroll = () => { scrollPosition.current = window.scrollY; };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    persist();
+    return () => { window.removeEventListener("scroll", onScroll); persist(); };
+  }, [userId, filtros, aplicados, ordem, direcao, centroSelecionado]);
+  useEffect(() => { if (!loading) window.scrollTo(0, scrollPosition.current); }, [loading]);
 
   const carregar = useCallback(async () => {
     setLoading(true); setErro("");
@@ -247,6 +258,10 @@ export function Relatorios() {
       } as LinhaRelatorio;
     });
   }, [dados.centros, dados.linhas, metricasFinanceiras, solicitacoesAbertas]);
+
+  const colaboradoresPorCentro = useMemo(() => hasSpecificReportFilters(aplicados)
+    ? namesByReportCenter(custosFiltrados, solicitacoesAbertas, aplicados, nomesColaboradores, resolveSolicitacaoFuncionarioNome)
+    : new Map<string, string[]>(), [aplicados, custosFiltrados, solicitacoesAbertas, nomesColaboradores]);
 
   const linhas = useMemo(() => [...linhasCalculadas].sort((a, b) => {
     const factor = direcao === "asc" ? 1 : -1;
@@ -417,7 +432,7 @@ export function Relatorios() {
     {loading ? <Spinner/> : <>
       <div className="stats report-stats"><ReportStat label="Total de solicitações" value={dados.resumo.solicitacoes}/><ReportStat label="Total comprado" value={resumoFinanceiro.compradas}/><ReportStat label="Total em aberto" value={solicitacoesAbertas.length}/><ReportStat label="Imprevistos/complementares" value={resumoFinanceiro.imprevistos}/><ReportStat label="Valor total geral" value={dinheiro(resumoFinanceiro.valorTotal)}/></div>
       <div className="report-sort"><label>Ordenar por <select value={ordem} onChange={(e) => setOrdem(e.target.value as SortKey)}><option value="codigo">Código</option><option value="nome">Centro de custo</option><option value="compradas">Compradas</option><option value="abertas">Em aberto</option><option value="imprevistos">Imprevistos/complementares</option><option value="valor_total">Valor total</option></select></label><button className="btn secondary" type="button" onClick={() => setDirecao(direcao === "asc" ? "desc" : "asc")}>{direcao === "asc" ? "Crescente" : "Decrescente"}</button></div>
-      <section className="card table-card">{!linhas.length ? <Empty text="Nenhum resultado para os filtros aplicados."/> : <table><thead><tr><th>Centro de custo</th><th>Compradas</th><th>Em aberto</th><th>Imprevistos/complementares</th><th>Valor total</th></tr></thead><tbody>{linhas.map((linha) => <tr key={linha.centro_custo_id || "sem-centro"}><td><button className="report-cost-center-link" type="button" onClick={() => setCentroSelecionado(linha.centro_custo_id || "sem-centro")}>{label(linha)}</button></td><td>{linha.compradas}</td><td>{linha.abertas}</td><td>{linha.imprevistos}</td><td><strong>{dinheiro(Number(linha.valor_total))}</strong></td></tr>)}</tbody></table>}</section>
+      <section className="card table-card">{!linhas.length ? <Empty text="Nenhum resultado para os filtros aplicados."/> : <table><thead><tr><th>Centro de custo</th><th>Compradas</th><th>Em aberto</th><th>Imprevistos/complementares</th><th>Valor total</th></tr></thead><tbody>{linhas.map((linha) => <tr key={linha.centro_custo_id || "sem-centro"}><td><button className="report-cost-center-link" type="button" onClick={() => setCentroSelecionado(linha.centro_custo_id || "sem-centro")}>{label(linha)}</button>{hasSpecificReportFilters(aplicados) && (colaboradoresPorCentro.get(linha.centro_custo_id || "sem-centro") || []).length > 0 && <div className="report-center-people">{colaboradoresPorCentro.get(linha.centro_custo_id || "sem-centro")?.join(", ")}</div>}</td><td>{linha.compradas}</td><td>{linha.abertas}</td><td>{linha.imprevistos}</td><td><strong>{dinheiro(Number(linha.valor_total))}</strong></td></tr>)}</tbody></table>}</section>
     </>}
     {detalhe && (
       <div className="report-detail-backdrop" role="presentation" onMouseDown={(event) => {
