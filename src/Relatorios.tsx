@@ -15,6 +15,7 @@ import { useAutoFinalization } from "./autoFinalization";
 import type { Obra } from "./types";
 import { idsSolicitacoesParaResolver, mapearNomesColaboradoresSolicitacoes, resolveSolicitacaoFuncionarioNome } from "./solicitacaoColaborador";
 import { hasSpecificReportFilters, namesByReportCenter, readReportViewState, writeReportViewState } from "./relatoriosPersistence";
+import { montarCsvCentrosCusto } from "./relatoriosCsv";
 
 type LinhaRelatorio = Obra & {
   centro_custo_id: string | null;
@@ -408,10 +409,7 @@ export function Relatorios({ userId }: { userId: string }) {
     return linha.centro_custo_id ? formatCentroCustoLabel(linha) : "SEM CENTRO DE CUSTO";
   }
   function exportarCsv() {
-    const cabecalho = ["Centro de custo","Compradas","Em aberto","Imprevistos/complementares","Valor total"];
-    const escape = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`;
-    const registros = linhas.map((linha) => [label(linha),linha.compradas,linha.abertas,linha.imprevistos,Number(linha.valor_total).toFixed(2)]);
-    const csv = `\uFEFF${[cabecalho, ...registros].map((row) => row.map(escape).join(";")).join("\r\n")}`;
+    const csv = montarCsvCentrosCusto(linhas, label, colaboradoresPorCentro, hasSpecificReportFilters(aplicados));
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a"); link.href = url; link.download = `relatorio-centros-custo-${hoje}.csv`; link.click();
     URL.revokeObjectURL(url);
