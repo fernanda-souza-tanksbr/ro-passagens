@@ -1,4 +1,4 @@
-import { motivoLabel, statusOptions } from "./lib";
+import { motivoLabel, statusOptions } from "./lib.ts";
 
 export type ReportFilters = { inicio: string; fim: string; centro: string; status: string; motivo: string; responsavel: string };
 export type ReportSort = "codigo" | "nome" | "compradas" | "abertas" | "imprevistos" | "valor_total";
