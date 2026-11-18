@@ -13,6 +13,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "./supabase";
 import { useAutoFinalization } from "./autoFinalization";
 import type { Obra } from "./types";
+import { idsSolicitacoesParaResolver, mapearNomesColaboradoresSolicitacoes, resolveSolicitacaoFuncionarioNome } from "./solicitacaoColaborador";
 
 type LinhaRelatorio = Obra & {
   centro_custo_id: string | null;
@@ -42,7 +43,9 @@ type CustoRelatorio = {
     created_at: string;
     comprado_em: string | null;
     viajante_nome_informado?: string | null;
-    funcionario?: { id: string; nome: string };
+    funcionario_id: string | null;
+    colaborador_id: string | null;
+    funcionario?: { id: string; nome: string } | null;
     anexos?: Array<{ complementar: boolean; imprevisto: boolean }>;
   };
 };
@@ -103,7 +106,7 @@ export function Relatorios() {
     let custosQuery = supabase
       .from("ro_passagem_custos")
       .select(
-        "solicitacao_id,centro_custo_id,tipo,descricao,valor,created_at,solicitacao:ro_passagem_solicitacoes!inner(id,obra_id,status,motivo,responsavel_ro_id,houve_imprevisto,excluida_em,created_at,comprado_em,viajante_nome_informado,funcionario:funcionarios(id,nome),anexos:ro_passagem_anexos(complementar,imprevisto))",
+        "solicitacao_id,centro_custo_id,tipo,descricao,valor,created_at,solicitacao:ro_passagem_solicitacoes!inner(id,obra_id,status,motivo,responsavel_ro_id,houve_imprevisto,excluida_em,created_at,comprado_em,viajante_nome_informado,funcionario_id,colaborador_id,funcionario:funcionarios(id,nome),anexos:ro_passagem_anexos(complementar,imprevisto))",
       )
       .is("solicitacao.excluida_em", null)
       .gt("valor", 0);
@@ -112,7 +115,7 @@ export function Relatorios() {
     let abertasQuery = supabase
       .from("ro_passagem_solicitacoes")
       .select(
-        "id,obra_id,status,motivo,responsavel_ro_id,houve_imprevisto,created_at,comprado_em,viajante_nome_informado,funcionario:funcionarios(id,nome),anexos:ro_passagem_anexos(complementar,imprevisto)",
+        "id,obra_id,status,motivo,responsavel_ro_id,houve_imprevisto,created_at,comprado_em,viajante_nome_informado,funcionario_id,colaborador_id,funcionario:funcionarios(id,nome),anexos:ro_passagem_anexos(complementar,imprevisto)",
       )
       .is("excluida_em", null)
       .in("status", ["solicitada", "em_analise", "em_andamento"]);
@@ -148,13 +151,22 @@ export function Relatorios() {
       setSolicitacoesAbertas(
         (abertasResult.data || []) as unknown as SolicitacaoAbertaRelatorio[],
       );
-    const solicitacoes = [...(custosResult.data || []).map((item: any) => item.solicitacao), ...(abertasResult.data || [])];
-    const ids = [...new Set(solicitacoes.map((item: any) => item?.id).filter((id): id is string => typeof id === "string"))];
+    // Nomes são complementares: erros aqui não afetam os valores financeiros.
+    const custosCarregados = (custosResult.data || []) as unknown as CustoRelatorio[];
+    const abertasCarregadas = (abertasResult.data || []) as unknown as SolicitacaoAbertaRelatorio[];
+    const ids = idsSolicitacoesParaResolver([
+      ...custosCarregados.map(({ solicitacao }) => solicitacao),
+      ...abertasCarregadas,
+    ]);
+    setNomesColaboradores({});
     if (ids.length) {
-      const { data: nomes, error: nomesErro } = await supabase.rpc("ro_nomes_colaboradores_solicitacoes", { p_solicitacao_ids: ids });
-      if (nomesErro) setErro((atual) => atual || nomesErro.message);
-      else setNomesColaboradores(Object.fromEntries((nomes || []).map((item: { solicitacao_id: string; funcionario_nome_exibicao: string }) => [item.solicitacao_id, item.funcionario_nome_exibicao])));
-    } else setNomesColaboradores({});
+      try {
+        const { data: nomes, error: nomesErro } = await supabase.rpc("ro_nomes_colaboradores_solicitacoes", { p_solicitacao_ids: ids });
+        if (!nomesErro) setNomesColaboradores(mapearNomesColaboradoresSolicitacoes(nomes));
+      } catch {
+        // Mantém os dados financeiros e os nomes disponíveis nos vínculos existentes.
+      }
+    }
     setLoading(false);
   }, [aplicados]);
   useAutoFinalization(true, carregar);
@@ -440,7 +452,7 @@ export function Relatorios() {
                 <thead><tr><th>Funcionário</th><th>Motivo</th><th>Status</th><th>Data da solicitação</th><th>Comprada em</th><th>Total</th><th>Ação</th></tr></thead>
                 <tbody>{detalhe.solicitacoes.map((item) => (
                   <tr key={item.solicitacao.id}>
-                    <td>{nomesColaboradores[item.solicitacao.id] || item.solicitacao.viajante_nome_informado || item.solicitacao.funcionario?.nome || "Não identificado"}</td>
+                    <td>{resolveSolicitacaoFuncionarioNome(item.solicitacao, nomesColaboradores[item.solicitacao.id]) || "Não identificado"}</td>
                     <td>{item.solicitacao.motivo ? motivoLabel[item.solicitacao.motivo as keyof typeof motivoLabel] : "Não informado"}</td>
                     <td>{statusLabel[item.solicitacao.status as keyof typeof statusLabel] || item.solicitacao.status}</td>
                     <td>{dataHora(item.solicitacao.created_at)}</td>
