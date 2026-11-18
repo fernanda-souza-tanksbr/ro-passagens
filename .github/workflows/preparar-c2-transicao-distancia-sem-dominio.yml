@@ -93,6 +93,7 @@ jobs:
             echo 'VITE_SUPABASE_URL from Vercel: MISMATCH'
           fi
           export VITE_SUPABASE_URL='https://hukhwirdrpylxpaedjbc.supabase.co'
+          export VITE_SUPABASE_PROJECT_ID='hukhwirdrpylxpaedjbc'
           case "$VARIANTE" in
             DISTANCIA) export VITE_FOLGA_CAMPO_KM_ENABLED='C2_PRODUCAO_APROVADA' ;;
             TRANSICAO) export VITE_FOLGA_CAMPO_KM_ENABLED='' ;;
@@ -100,6 +101,20 @@ jobs:
           esac
           node --input-type=module <<'NODE'
           if(process.env.VITE_FOLGA_CAMPO_KM_ENABLED !== (process.env.VARIANTE==='DISTANCIA'?'C2_PRODUCAO_APROVADA':'')) throw Error('Incorrect C2 build flag');
+          const publicKey=process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+          const keyFormatValid=typeof publicKey==='string' && (
+            (publicKey.startsWith('sb_publishable_') && publicKey.length>20) ||
+            (publicKey.startsWith('eyJ') && publicKey.split('.').length===3)
+          );
+          if(!keyFormatValid) {
+            console.error('Invalid VITE_SUPABASE_PUBLISHABLE_KEY format (value hidden)');
+            process.exit(1);
+          }
+          if(process.env.VITE_SUPABASE_URL!=='https://hukhwirdrpylxpaedjbc.supabase.co' ||
+             process.env.VITE_SUPABASE_PROJECT_ID!=='hukhwirdrpylxpaedjbc') {
+            console.error('Public Supabase project configuration mismatch');
+            process.exit(1);
+          }
           const required=['VITE_SUPABASE_URL','VITE_SUPABASE_PUBLISHABLE_KEY','VITE_SUPABASE_PROJECT_ID'];
           for(const name of required) {
             const value=process.env[name]?.trim();
