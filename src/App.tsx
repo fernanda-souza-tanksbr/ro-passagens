@@ -38,6 +38,8 @@ export function App() {
   const [recoveryOnly, setRecoveryOnly] = useState(() => sessionStorage.getItem("portal-password-recovery") === "active");
   const [loading, setLoading] = useState(true);
   const [accessLoading, setAccessLoading] = useState(false);
+  // Permissoes so podem ser usadas depois de resolvidas para a sessao atual.
+  const [accessReadyUserId, setAccessReadyUserId] = useState<string | null>(null);
   const [side, setSide] = useState(false);
   const [access, setAccess] = useState<Access>(EMPTY_ACCESS);
   const [userName, setUserName] = useState("");
@@ -48,6 +50,7 @@ export function App() {
     setSession(null);
     setRecoveryOnly(false);
     setAccess(EMPTY_ACCESS);
+    setAccessReadyUserId(null);
     setAccessLoading(false);
     setSide(false);
     setUserName("");
@@ -70,10 +73,12 @@ export function App() {
   useEffect(() => {
     if (!session) {
       setAccess(EMPTY_ACCESS);
+      setAccessReadyUserId(null);
       setAccessLoading(false);
       return;
     }
     setCatalogCacheUser(session.user.id);
+    setAccessReadyUserId(null);
     setAccessLoading(true);
     let active = true;
     const refresh = () => {
@@ -82,6 +87,7 @@ export function App() {
         if (!active || request !== accessRequest.current) return;
         setUserName(snapshot.userName);
         setAccess(snapshot.access);
+        setAccessReadyUserId(session.user.id);
       }).finally(() => { if (active && request === accessRequest.current) setAccessLoading(false); });
     };
     const unsubscribe = subscribeAccessInvalidation((userId) => {
@@ -99,7 +105,7 @@ export function App() {
   if (location.pathname === "/logout") return <Logout clearLocalAuthState={clearLocalAuthState} />;
   if (recoveryOnly && location.pathname !== "/redefinir-senha") return <Navigate to="/redefinir-senha" replace />;
   if (location.pathname === "/redefinir-senha") return <PasswordRecovery />;
-  if (loading || accessLoading)
+  if (loading || accessLoading || (session && accessReadyUserId !== session.user.id))
     return (
       <div className="full">
         <Spinner />
