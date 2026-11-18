@@ -28,7 +28,12 @@ begin
      and new.data_retorno is not distinct from old.data_retorno
      and new.retorno_indefinido is not distinct from old.retorno_indefinido
      and new.folga_antecipacao_justificativa
-         is not distinct from old.folga_antecipacao_justificativa then
+         is not distinct from old.folga_antecipacao_justificativa
+     and not (old.status not in ('solicitada','em_andamento','passagem_comprada')
+       and new.status in ('solicitada','em_andamento','passagem_comprada'))
+     and not (old.aprovacao_status = 'reprovada'
+       and new.aprovacao_status is distinct from 'reprovada')
+     and not (old.excluida_em is not null and new.excluida_em is null) then
     new.folga_data_prevista_ciclo:=old.folga_data_prevista_ciclo;
     new.folga_ciclo_anterior_id:=old.folga_ciclo_anterior_id;
     new.folga_antecipada:=old.folga_antecipada;
@@ -53,10 +58,21 @@ begin
   end if;
   -- Identidade canonica: um cadastro privado pode apontar para funcionario tradicional.
   -- O mesmo valor e usado no advisory lock e na busca de conflitos.
-  select p.funcionario_id into v_identidade_funcionario
-  from public.ro_funcionarios_enderecos_privados p
-  where p.id = new.colaborador_id;
-  v_identidade_funcionario := coalesce(new.funcionario_id,v_identidade_funcionario);
+  if new.colaborador_id is not null then
+    select p.funcionario_id into v_identidade_funcionario
+    from public.ro_funcionarios_enderecos_privados p
+    where p.id = new.colaborador_id;
+    if not found then
+      raise exception 'FOLGA_COLABORADOR_PRIVADO_INEXISTENTE';
+    end if;
+    if new.funcionario_id is not null
+       and v_identidade_funcionario is distinct from new.funcionario_id then
+      raise exception 'FOLGA_IDENTIDADE_INCONSISTENTE';
+    end if;
+  end if;
+  if new.funcionario_id is not null then
+    v_identidade_funcionario := new.funcionario_id;
+  end if;
   v_identidade_chave := case when v_identidade_funcionario is not null
     then 'funcionario:'||v_identidade_funcionario::text
     else 'privado:'||new.colaborador_id::text end;
@@ -118,7 +134,7 @@ begin
       and s.status in ('solicitada','em_andamento','passagem_comprada')
       and s.aprovacao_status is distinct from 'reprovada'
       and (case when v_identidade_funcionario is not null then
-        coalesce(s.funcionario_id,sp.funcionario_id)=v_identidade_funcionario
+        (s.funcionario_id=v_identidade_funcionario or sp.funcionario_id=v_identidade_funcionario)
         else s.colaborador_id=new.colaborador_id end)
       and new.data_ida <= case when s.retorno_indefinido or s.data_retorno is null then s.data_ida else greatest(s.data_ida,s.data_retorno) end
       and s.data_ida <= case when new.retorno_indefinido or new.data_retorno is null then new.data_ida else greatest(new.data_ida,new.data_retorno) end
@@ -147,7 +163,12 @@ begin
       or new.colaborador_id is distinct from old.colaborador_id
       or new.data_ida is distinct from old.data_ida
       or new.data_retorno is distinct from old.data_retorno
-      or new.retorno_indefinido is distinct from old.retorno_indefinido) then
+      or new.retorno_indefinido is distinct from old.retorno_indefinido
+      or old.status not in ('solicitada','em_andamento','passagem_comprada')
+         and new.status in ('solicitada','em_andamento','passagem_comprada')
+      or old.aprovacao_status = 'reprovada'
+         and new.aprovacao_status is distinct from 'reprovada'
+      or old.excluida_em is not null and new.excluida_em is null) then
     raise exception 'FOLGA_FUTURA_DUPLICADA:%',v_duplicada;
   end if;
 
@@ -210,3 +231,14 @@ begin
 end;
 $function$
 ;
+
+-- ATENCAO: a definicao anterior nao inclui UPDATE OF data_retorno,
+-- retorno_indefinido, colaborador_id, aprovacao_status ou excluida_em.
+-- Recriar o trigger em transacao para validar essas transicoes.
+DROP TRIGGER IF EXISTS ro_validar_ciclo_folga_campo ON public.ro_passagem_solicitacoes;
+CREATE TRIGGER ro_validar_ciclo_folga_campo
+BEFORE INSERT OR UPDATE OF funcionario_id, colaborador_id, motivo, data_ida,
+  data_retorno, retorno_indefinido, status, aprovacao_status, excluida_em,
+  folga_antecipacao_justificativa
+ON public.ro_passagem_solicitacoes
+FOR EACH ROW EXECUTE FUNCTION public.ro_validar_ciclo_folga_campo();
