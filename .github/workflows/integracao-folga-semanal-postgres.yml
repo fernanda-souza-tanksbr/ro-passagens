@@ -1,0 +1,103 @@
+name: Integracao PostgreSQL Folga Semanal (isolada)
+on:
+  push:
+    branches:
+      - feat/folga-campo-semanal-planejamento-20261118
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  postgres-integracao:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_ci_only
+          POSTGRES_DB: folgas_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d folgas_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres_ci_only
+      PGDATABASE: folgas_ci
+      PGOPTIONS: '-c client_min_messages=notice'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Preparar fixture isolada e funcao original
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f tests/postgres/fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f sql/folga_semanal_rollback.sql
+          psql -XAt -c "select pg_get_functiondef('public.ro_validar_ciclo_folga_campo()'::regprocedure)" > /tmp/trigger-original.txt
+          psql -XAt -c "select pg_get_triggerdef(oid) from pg_trigger where tgname='ro_validar_ciclo_folga_campo'" > /tmp/trigger-original-definition.txt
+      - name: Aplicar migracao real
+        run: psql -X -v ON_ERROR_STOP=1 -f sql/folga_semanal_trigger_draft.sql
+      - name: INSERT UPDATE identidade reativacao regimes
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/postgres/integration.sql
+      - name: Concorrencia com duas transacoes reais
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/concurrent-setup.sql <<'SQL'
+          INSERT INTO ro_private.folga_criacao_contexto(solicitacao_id,funcionario_id,obra_id,criado_por,alocacao_id,distancia_km,regime_faixa,intervalo_dias)
+          VALUES
+          ('00000000-0000-0000-0000-000000000701','00000000-0000-0000-0000-000000000071','00000000-0000-0000-0000-000000000099','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000088',100,'7',7),
+          ('00000000-0000-0000-0000-000000000702','00000000-0000-0000-0000-000000000071','00000000-0000-0000-0000-000000000099','00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000088',100,'7',7);
+          SQL
+          psql -X -v ON_ERROR_STOP=1 -f /tmp/concurrent-setup.sql
+          cat > /tmp/concurrent-one.sql <<'SQL'
+          BEGIN;
+          INSERT INTO ro_passagem_solicitacoes(id,funcionario_id,obra_id,data_ida)
+          VALUES('00000000-0000-0000-0000-000000000701','00000000-0000-0000-0000-000000000071','00000000-0000-0000-0000-000000000099',current_date+80);
+          SELECT pg_sleep(3);
+          COMMIT;
+          SQL
+          cat > /tmp/concurrent-two.sql <<'SQL'
+          BEGIN;
+          INSERT INTO ro_passagem_solicitacoes(id,funcionario_id,obra_id,data_ida)
+          VALUES('00000000-0000-0000-0000-000000000702','00000000-0000-0000-0000-000000000071','00000000-0000-0000-0000-000000000099',current_date+80);
+          COMMIT;
+          SQL
+          psql -X -v ON_ERROR_STOP=1 -f /tmp/concurrent-one.sql > /tmp/one.log 2>&1 & pid1=$!
+          sleep 1
+          psql -X -v ON_ERROR_STOP=1 -f /tmp/concurrent-two.sql > /tmp/two.log 2>&1 & pid2=$!
+          set +e
+          wait "$pid1"; result1=$?
+          wait "$pid2"; result2=$?
+          set -e
+          test "$result1" -eq 0
+          test "$result2" -ne 0
+          grep -q 'FOLGA_FUTURA_DUPLICADA' /tmp/two.log
+          test "$(psql -XAt -c "select count(*) from ro_passagem_solicitacoes where funcionario_id='00000000-0000-0000-0000-000000000071'")" = 1
+          echo 'PASS concurrency: first committed, second rejected after advisory lock'
+      - name: Rollback e comparacao de definicoes
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f sql/folga_semanal_rollback.sql
+          psql -XAt -c "select pg_get_functiondef('public.ro_validar_ciclo_folga_campo()'::regprocedure)" > /tmp/trigger-restored.txt
+          psql -XAt -c "select pg_get_triggerdef(oid) from pg_trigger where tgname='ro_validar_ciclo_folga_campo'" > /tmp/trigger-restored-definition.txt
+          diff -u /tmp/trigger-original.txt /tmp/trigger-restored.txt
+          diff -u /tmp/trigger-original-definition.txt /tmp/trigger-restored-definition.txt
+          echo 'PASS rollback function and trigger identical'
+      - name: Resumo publico sem dados pessoais
+        if: always()
+        shell: bash
+        run: |
+          echo '## Homologacao PostgreSQL isolada' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Banco: PostgreSQL 17 efemero, sem credenciais de producao' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Resultado por etapa: consultar status dos passos do job' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Nenhum deploy ou alteracao no Supabase operacional' >> "$GITHUB_STEP_SUMMARY"
