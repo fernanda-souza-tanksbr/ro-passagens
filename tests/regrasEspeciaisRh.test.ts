@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { alternarModoViajante, emptyNovaSolicitacaoForm, parseDraft, serializeDraft } from "../src/novaSolicitacaoDraft.ts";
 import { calcularDataMinima, mensagemAntecedencia, motivosPermitidos, regraPrazo, validarSolicitacao } from "../src/passagemRules.ts";
+import { resolveSolicitacaoFuncionarioNome } from "../src/solicitacaoColaborador.ts";
 
 const migration=readFileSync(new URL("../supabase/migrations/202610060001_regras_especiais_rh.sql",import.meta.url),"utf8");
 const pages=readFileSync(new URL("../src/pages.tsx",import.meta.url),"utf8");
@@ -146,6 +147,14 @@ test("consumidores mostram nome manual e dados de emissão nulos",()=>{
   assert.match(migration,/ro_nomes_colaboradores_solicitacoes[\s\S]*viajante_nome_informado/);
   assert.match(migration,/return query select v_nome_manual,null::date,null::text,null::text,null::text/);
   assert.match(pages,/Nome informado, dados cadastrais ainda não disponíveis/);
-  assert.match(report,/viajante_nome_informado \|\| item\.solicitacao\.funcionario/);
+  assert.match(report,/resolveSolicitacaoFuncionarioNome\(item\.solicitacao, nomesColaboradores\[item\.solicitacao\.id\]\)/);
+  assert.match(report,/ro_nomes_colaboradores_solicitacoes/);
+  assert.match(report,/mapearNomesColaboradoresSolicitacoes\(nomes\)/);
+  assert.doesNotMatch(report,/ro_funcionarios_enderecos_privados/);
+  assert.equal(resolveSolicitacaoFuncionarioNome({ viajante_nome_informado: "  Nome Manual  ", funcionario_id: null, colaborador_id: null }), "Nome Manual");
+  assert.equal(resolveSolicitacaoFuncionarioNome({ funcionario_id: "f1", funcionario: { nome: "Funcionario Tradicional" } }), "Funcionario Tradicional");
+  assert.equal(resolveSolicitacaoFuncionarioNome({ colaborador_id: "p1", colaborador: null }, "  Colaborador Privado  "), "Colaborador Privado");
+  assert.equal(resolveSolicitacaoFuncionarioNome({ funcionario_id: null, colaborador_id: null, viajante_nome_informado: null }), null);
+  assert.equal(resolveSolicitacaoFuncionarioNome({ funcionario_id: "f1", funcionario: null }), null);
   assert.match(email,/resolveTravelerName\(sol\.viajante_nome_informado,privateTraveler\?\.nome,traveler\?\.nome\)/);
 });
