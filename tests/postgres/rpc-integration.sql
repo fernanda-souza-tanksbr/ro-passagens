@@ -50,7 +50,7 @@ DO $body$ DECLARE d date:=current_date+100; BEGIN
  PERFORM pg_temp.rpc_expect_error(format('SELECT pg_temp.rpc_create(911,%L::date,100,NULL,%L::uuid)',d,'00000000-0000-0000-0000-000000000881'),'FOLGA_FUTURA_DUPLICADA');
  PERFORM pg_temp.rpc_expect_error(format('SELECT pg_temp.rpc_create(912,%L::date,100,%L::uuid,%L::uuid)',d+35,'00000000-0000-0000-0000-000000000802','00000000-0000-0000-0000-000000000881'),'VINCULO_FUNCIONARIO_INCONSISTENTE');
  PERFORM pg_temp.rpc_expect_error(format('SELECT pg_temp.rpc_create(913,%L::date,100,%L::uuid)',d+35,'00000000-0000-0000-0000-000000000888'),'FUNCIONARIO_INDISPONIVEL');
-END $$;
+END $body$;
 
 -- Positive RPC path with authorized linked private identity and independent private identity.
 INSERT INTO public.ro_funcionarios_enderecos_privados(id,funcionario_id,ativo,nome)
