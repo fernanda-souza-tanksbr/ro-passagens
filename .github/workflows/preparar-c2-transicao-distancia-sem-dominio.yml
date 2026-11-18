@@ -85,6 +85,14 @@ jobs:
           set -a
           source .vercel/.env.production.local
           set +a
+          # Public URL is pinned to the verified Supabase project for this C2 build.
+          # Report only whether the Vercel-loaded value matches; never echo it.
+          if [ "${VITE_SUPABASE_URL:-}" = 'https://hukhwirdrpylxpaedjbc.supabase.co' ]; then
+            echo 'VITE_SUPABASE_URL from Vercel: MATCH'
+          else
+            echo 'VITE_SUPABASE_URL from Vercel: MISMATCH'
+          fi
+          export VITE_SUPABASE_URL='https://hukhwirdrpylxpaedjbc.supabase.co'
           case "$VARIANTE" in
             DISTANCIA) export VITE_FOLGA_CAMPO_KM_ENABLED='C2_PRODUCAO_APROVADA' ;;
             TRANSICAO) export VITE_FOLGA_CAMPO_KM_ENABLED='' ;;
