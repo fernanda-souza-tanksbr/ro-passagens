@@ -1,5 +1,5 @@
-import type { AddressAccess } from "./addressAccess";
-import { podeAcessarAreasGerais } from "./addressAccess";
+import type { AddressAccess } from "./addressAccess.ts";
+import { podeAcessarAreasGerais } from "./addressAccess.ts";
 
 /** Until access for this exact session is resolved, protected routes must wait. */
 export function reportRouteDecision(sessionUserId: string | null, readyUserId: string | null, access: AddressAccess & { canViewAll: boolean }): "pending" | "allowed" | "denied" {
