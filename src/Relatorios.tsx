@@ -80,6 +80,7 @@ export function Relatorios() {
   const [solicitacoesAbertas, setSolicitacoesAbertas] = useState<
     SolicitacaoAbertaRelatorio[]
   >([]);
+  const [nomesColaboradores, setNomesColaboradores] = useState<Record<string, string>>({});
   const [centroSelecionado, setCentroSelecionado] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState("");
@@ -147,6 +148,13 @@ export function Relatorios() {
       setSolicitacoesAbertas(
         (abertasResult.data || []) as unknown as SolicitacaoAbertaRelatorio[],
       );
+    const solicitacoes = [...(custosResult.data || []).map((item: any) => item.solicitacao), ...(abertasResult.data || [])];
+    const ids = [...new Set(solicitacoes.map((item: any) => item?.id).filter((id): id is string => typeof id === "string"))];
+    if (ids.length) {
+      const { data: nomes, error: nomesErro } = await supabase.rpc("ro_nomes_colaboradores_solicitacoes", { p_solicitacao_ids: ids });
+      if (nomesErro) setErro((atual) => atual || nomesErro.message);
+      else setNomesColaboradores(Object.fromEntries((nomes || []).map((item: { solicitacao_id: string; funcionario_nome_exibicao: string }) => [item.solicitacao_id, item.funcionario_nome_exibicao])));
+    } else setNomesColaboradores({});
     setLoading(false);
   }, [aplicados]);
   useAutoFinalization(true, carregar);
@@ -432,7 +440,7 @@ export function Relatorios() {
                 <thead><tr><th>Funcionário</th><th>Motivo</th><th>Status</th><th>Data da solicitação</th><th>Comprada em</th><th>Total</th><th>Ação</th></tr></thead>
                 <tbody>{detalhe.solicitacoes.map((item) => (
                   <tr key={item.solicitacao.id}>
-                    <td>{item.solicitacao.viajante_nome_informado || item.solicitacao.funcionario?.nome || "Não identificado"}</td>
+                    <td>{nomesColaboradores[item.solicitacao.id] || item.solicitacao.viajante_nome_informado || item.solicitacao.funcionario?.nome || "Não identificado"}</td>
                     <td>{item.solicitacao.motivo ? motivoLabel[item.solicitacao.motivo as keyof typeof motivoLabel] : "Não informado"}</td>
                     <td>{statusLabel[item.solicitacao.status as keyof typeof statusLabel] || item.solicitacao.status}</td>
                     <td>{dataHora(item.solicitacao.created_at)}</td>
