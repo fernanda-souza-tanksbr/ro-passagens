@@ -27,7 +27,7 @@ DO $$ DECLARE d date:=current_date+40; BEGIN
  PERFORM pg_temp.expect_error(format('SELECT pg_temp.add_folga(107,%L::date,7)',d+32),'FOLGA_FUTURA_DUPLICADA');
  PERFORM pg_temp.add_folga(108,d+40,7,'00000000-0000-0000-0000-000000000011',NULL,d+100,true);
  PERFORM pg_temp.add_folga(109,d+41,7);
- PERFORM pg_temp.expect_error(format('UPDATE ro_passagem_solicitacoes SET data_retorno=%L::date WHERE id=%L::uuid',d+42,'00000000-0000-0000-0000-000000000108'),'FOLGA_FUTURA_DUPLICADA');
+ PERFORM pg_temp.expect_error('UPDATE ro_passagem_solicitacoes SET retorno_indefinido=false WHERE id=''00000000-0000-0000-0000-000000000108''','FOLGA_FUTURA_DUPLICADA');
  RAISE NOTICE 'PASS four weeks, out-of-order, same-day, overlaps, indefinite return, UPDATE';
 END $$;
 -- Independent identities and linked identities.
