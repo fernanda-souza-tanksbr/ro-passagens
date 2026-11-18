@@ -16,7 +16,7 @@ jobs:
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
       VERCEL_TELEMETRY_DISABLED: '1'
       VERCEL_CLI_VERSION: '63.1.2'
-      SOURCE_SHA: 0a159a6c96cb175442419426f3edc5a4423a6b9a
+      SOURCE_SHA: 7048be0db8de13361721f3fbe904aea5fce54b9c
     steps:
       - name: Verificar alvo e variaveis sem exibir valores
         shell: bash
@@ -29,7 +29,7 @@ jobs:
       - name: Checkout exclusivo do commit revisado
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          ref: 0a159a6c96cb175442419426f3edc5a4423a6b9a
+          ref: 7048be0db8de13361721f3fbe904aea5fce54b9c
           persist-credentials: false
       - name: Node 22
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
