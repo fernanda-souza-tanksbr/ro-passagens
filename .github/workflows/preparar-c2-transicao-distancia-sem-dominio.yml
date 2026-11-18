@@ -107,13 +107,19 @@ jobs:
             try {
               parsed=new URL(url);
             } catch (error) {
+              const trimmed=url.trim();
+              const quote=String.fromCharCode(34);
+              const apostrophe=String.fromCharCode(39);
+              const slash=String.fromCharCode(92);
               const category =
-                url.trim().length===0 ? 'empty_or_whitespace' :
-                /^['"]|['"]$/.test(url) ? 'literal_quotes' :
-                /^\\\\?["']|\\\\["']/.test(url) ? 'escape_characters' :
-                /^(\\$\\{|\\$[A-Za-z_]|\\{\\{)/.test(url) ? 'unresolved_reference' :
-                /[\\r\\n\\t]/.test(url) ? 'control_characters' :
-                /^https?:\\/\\//i.test(url.trim()) ? 'malformed_http_url' :
+                !trimmed ? 'empty_or_whitespace' :
+                [quote,apostrophe].includes(trimmed[0]) ||
+                  [quote,apostrophe].includes(trimmed.at(-1)) ? 'literal_quotes' :
+                url.includes(slash+quote) || url.includes(slash+apostrophe) ? 'escape_characters' :
+                trimmed.startsWith('${') || trimmed.startsWith('$VITE_') ||
+                  trimmed.startsWith('{{') ? 'unresolved_reference' :
+                [13,10,9].some(code=>url.includes(String.fromCharCode(code))) ? 'control_characters' :
+                trimmed.startsWith('https://') || trimmed.startsWith('http://') ? 'malformed_http_url' :
                 'not_http_url_or_other_invalid_format';
               console.error('Supabase URL parsing failed; safe category: '+category);
               process.exit(1);
