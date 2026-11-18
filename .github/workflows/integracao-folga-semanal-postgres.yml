@@ -84,6 +84,19 @@ jobs:
           grep -q 'FOLGA_FUTURA_DUPLICADA' /tmp/two.log
           test "$(psql -XAt -c "select count(*) from ro_passagem_solicitacoes where funcionario_id='00000000-0000-0000-0000-000000000071'")" = 1
           echo 'PASS concurrency: first committed, second rejected after advisory lock'
+      - name: Carregar cadeia RPC real (sem stubs permissivos)
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f tests/postgres/rpc-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/postgres/rpc-production-chain.sql
+          echo 'PASS: definicoes reais da cadeia RPC carregadas' >> "$GITHUB_STEP_SUMMARY"
+      - name: Executar RPC completa em banco isolado
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f tests/postgres/rpc-integration.sql
+          echo 'PASS: ro_criar_folga_campo_com_distancia invocada com sucesso' >> "$GITHUB_STEP_SUMMARY"
       - name: Rollback e comparacao de definicoes
         shell: bash
         run: |
