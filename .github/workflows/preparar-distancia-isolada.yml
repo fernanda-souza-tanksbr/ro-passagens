@@ -51,7 +51,7 @@ jobs:
           set -euo pipefail
           mkdir -p .vercel
           printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
-          vercel pull --yes --environment=production --scope tanks
+          vercel pull --yes --environment=production --scope tanks --token "$VERCEL_TOKEN"
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
           const project = JSON.parse(fs.readFileSync('.vercel/project.json','utf8'));
@@ -71,7 +71,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          vercel build --prod --scope tanks
+          vercel build --prod --scope tanks --token "$VERCEL_TOKEN"
       - name: Stage production deployment without aliases
         id: deploy
         env:
@@ -79,7 +79,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          url="$(vercel deploy --prebuilt --prod --skip-domain --scope tanks --meta approvedCommit="$APPROVED_SHA")"
+          url="$(vercel deploy --prebuilt --prod --skip-domain --scope tanks --token "$VERCEL_TOKEN" --meta approvedCommit="$APPROVED_SHA")"
           DEPLOYMENT_URL="$url" node --input-type=module -e '
             const url = process.env.DEPLOYMENT_URL;
             const u = new URL(url);
