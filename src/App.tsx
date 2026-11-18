@@ -154,7 +154,7 @@ export function App() {
                   path="/relatorios"
                   element={
                     canAccessGeneralAreas ? (
-                      <Relatorios />
+                      <Relatorios key={session.user.id} userId={session.user.id} />
                     ) : (
                       <Navigate to="/solicitacoes" replace />
                     )
