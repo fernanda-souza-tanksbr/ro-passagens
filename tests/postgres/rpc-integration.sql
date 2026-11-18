@@ -33,8 +33,36 @@ END $$;
 -- Linked private identity: same employee is canonical; invalid identity rejected.
 INSERT INTO public.ro_funcionarios_enderecos_privados(id,funcionario_id,ativo,nome)
  VALUES ('00000000-0000-0000-0000-000000000881','00000000-0000-0000-0000-000000000801',true,'Privado Vinculado Ficticio');
-DO $$ DECLARE d date:=current_date+100; BEGIN
+-- The real private-access predicate must grant an active operator and deny an unprivileged user.
+DO $ BEGIN
+ IF public.ro_can_view_private_addresses(auth.uid()) IS DISTINCT FROM true THEN
+  RAISE EXCEPTION 'Expected authorized private-access operator';
+ END IF;
+ PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',false);
+ IF public.ro_can_view_private_addresses(auth.uid()) IS DISTINCT FROM false THEN
+  RAISE EXCEPTION 'Unprivileged user unexpectedly authorized';
+ END IF;
+ PERFORM pg_temp.rpc_expect_error(format('SELECT pg_temp.rpc_create(915,%L::date,100,NULL,%L::uuid)',current_date+150,'00000000-0000-0000-0000-000000000881'),'COLABORADOR_PRIVADO_ACESSO_NEGADO');
+ PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',false);
+ RAISE NOTICE 'PASS private-access authorization: operator allowed, unprivileged user denied';
+END $;
+DO $ DECLARE d date:=current_date+100; BEGIN
  PERFORM pg_temp.rpc_expect_error(format('SELECT pg_temp.rpc_create(911,%L::date,100,NULL,%L::uuid)',d,'00000000-0000-0000-0000-000000000881'),'FOLGA_FUTURA_DUPLICADA');
  PERFORM pg_temp.rpc_expect_error(format('SELECT pg_temp.rpc_create(912,%L::date,100,%L::uuid,%L::uuid)',d+35,'00000000-0000-0000-0000-000000000802','00000000-0000-0000-0000-000000000881'),'VINCULO_FUNCIONARIO_INCONSISTENTE');
  PERFORM pg_temp.rpc_expect_error(format('SELECT pg_temp.rpc_create(913,%L::date,100,%L::uuid)',d+35,'00000000-0000-0000-0000-000000000888'),'FUNCIONARIO_INDISPONIVEL');
+END $$;
+
+-- Positive RPC path with authorized linked private identity and independent private identity.
+INSERT INTO public.ro_funcionarios_enderecos_privados(id,funcionario_id,ativo,nome)
+ VALUES ('00000000-0000-0000-0000-000000000882',NULL,true,'Privado Independente Ficticio');
+DO $$ DECLARE d date:=current_date+100; v uuid; BEGIN
+ v:=pg_temp.rpc_create(916,d+55,100,NULL,'00000000-0000-0000-0000-000000000881');
+ IF NOT EXISTS (SELECT 1 FROM public.ro_passagem_solicitacoes WHERE id=v AND funcionario_id='00000000-0000-0000-0000-000000000801') THEN
+  RAISE EXCEPTION 'Linked private RPC identity was not normalized';
+ END IF;
+ v:=pg_temp.rpc_create(917,d+60,100,NULL,'00000000-0000-0000-0000-000000000882');
+ IF NOT EXISTS (SELECT 1 FROM public.ro_passagem_solicitacoes WHERE id=v AND colaborador_id='00000000-0000-0000-0000-000000000882') THEN
+  RAISE EXCEPTION 'Independent private RPC identity was not preserved';
+ END IF;
+ RAISE NOTICE 'PASS authorized linked and independent private RPC creation';
 END $$;
