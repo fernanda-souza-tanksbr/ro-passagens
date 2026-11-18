@@ -14,6 +14,8 @@ declare
   v_aprovada boolean := false;
   v_contexto ro_private.folga_criacao_contexto%rowtype;
   v_ultima_data date;
+  v_identidade_funcionario uuid;
+  v_identidade_chave text;
 begin
   -- Atualizacoes de status sem mudanca dos parametros do ciclo preservam
   -- os valores ja registrados, inclusive a aprovacao de antecipacao.
@@ -23,6 +25,8 @@ begin
      and new.colaborador_id is not distinct from old.colaborador_id
      and new.obra_id is not distinct from old.obra_id
      and new.data_ida is not distinct from old.data_ida
+     and new.data_retorno is not distinct from old.data_retorno
+     and new.retorno_indefinido is not distinct from old.retorno_indefinido
      and new.folga_antecipacao_justificativa
          is not distinct from old.folga_antecipacao_justificativa then
     new.folga_data_prevista_ciclo:=old.folga_data_prevista_ciclo;
@@ -47,9 +51,17 @@ begin
     new.folga_antecipacao_analisada_em:=null;
     return new;
   end if;
+  -- Identidade canonica: um cadastro privado pode apontar para funcionario tradicional.
+  -- O mesmo valor e usado no advisory lock e na busca de conflitos.
+  select p.funcionario_id into v_identidade_funcionario
+  from public.ro_funcionarios_enderecos_privados p
+  where p.id = new.colaborador_id;
+  v_identidade_funcionario := coalesce(new.funcionario_id,v_identidade_funcionario);
+  v_identidade_chave := case when v_identidade_funcionario is not null
+    then 'funcionario:'||v_identidade_funcionario::text
+    else 'privado:'||new.colaborador_id::text end;
   perform pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended(coalesce(new.funcionario_id::text,
-      'privado:'||new.colaborador_id::text),904)
+    pg_catalog.hashtextextended(v_identidade_chave,904)
   );
 
   if tg_op='INSERT' then
@@ -100,12 +112,14 @@ begin
   if new.folga_intervalo_dias = 7 then
     select s.id into v_duplicada
     from public.ro_passagem_solicitacoes s
+    left join public.ro_funcionarios_enderecos_privados sp on sp.id=s.colaborador_id
     where s.id is distinct from new.id and s.motivo='folga_campo'
       and s.excluida_em is null
       and s.status in ('solicitada','em_andamento','passagem_comprada')
       and s.aprovacao_status is distinct from 'reprovada'
-      and ((new.funcionario_id is not null and s.funcionario_id=new.funcionario_id)
-        or (new.colaborador_id is not null and s.colaborador_id=new.colaborador_id))
+      and (case when v_identidade_funcionario is not null then
+        coalesce(s.funcionario_id,sp.funcionario_id)=v_identidade_funcionario
+        else s.colaborador_id=new.colaborador_id end)
       and new.data_ida <= case when s.retorno_indefinido or s.data_retorno is null then s.data_ida else greatest(s.data_ida,s.data_retorno) end
       and s.data_ida <= case when new.retorno_indefinido or new.data_retorno is null then new.data_ida else greatest(new.data_ida,new.data_retorno) end
     order by s.data_ida,s.created_at limit 1;
