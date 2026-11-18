@@ -20,6 +20,7 @@ import { Logout } from "./Logout";
 import { EMPTY_ACCESS, invalidateAccess, loadAccess, subscribeAccessInvalidation, type Access } from "./accessCache";
 import { setCatalogCacheUser } from "./catalogCache";
 import { subscribeVisible } from "./visibilityRevalidation";
+import { reportRouteDecision } from "./reportRouteDecision";
 
 export type { Access } from "./accessCache";
 
@@ -105,7 +106,7 @@ export function App() {
   if (location.pathname === "/logout") return <Logout clearLocalAuthState={clearLocalAuthState} />;
   if (recoveryOnly && location.pathname !== "/redefinir-senha") return <Navigate to="/redefinir-senha" replace />;
   if (location.pathname === "/redefinir-senha") return <PasswordRecovery />;
-  if (loading || accessLoading || (session && accessReadyUserId !== session.user.id))
+  if (loading || accessLoading || (session && reportRouteDecision(session.user.id, accessReadyUserId, access) === "pending"))
     return (
       <div className="full">
         <Spinner />
@@ -114,6 +115,7 @@ export function App() {
   if (!session) return <Login />;
   const canAccessAddressImport = podeAcessarImportacaoEnderecos(access);
   const canAccessGeneralAreas = podeAcessarAreasGerais(access);
+  const reportRoute = reportRouteDecision(session.user.id, accessReadyUserId, access);
   return (
     <Routes>
       <Route
@@ -159,7 +161,7 @@ export function App() {
                 <Route
                   path="/relatorios"
                   element={
-                    canAccessGeneralAreas ? (
+                    reportRoute === "allowed" ? (
                       <Relatorios key={session.user.id} userId={session.user.id} />
                     ) : (
                       <Navigate to="/solicitacoes" replace />
