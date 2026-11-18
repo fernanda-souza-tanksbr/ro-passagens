@@ -8,7 +8,7 @@ const prefix = "ro-passagens:relatorios:v1:";
 const validSort = new Set<ReportSort>(["codigo","nome","compradas","abertas","imprevistos","valor_total"]);
 const validStatus = new Set([...statusOptions.map(x => x.value), "em_analise"]);
 const validMotivo = new Set(Object.keys(motivoLabel));
-const date = (v: unknown) => typeof v === "string" && (v === "" || (/^\\d{4}-\\d{2}-\\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)))) ? v : "";
+const date = (v: unknown) => typeof v === "string" && (v === "" || (/^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)))) ? v : "";
 const id = (v: unknown) => typeof v === "string" && (v === "" || v === "sem-centro" || /^[0-9a-f-]{36}$/i.test(v)) ? v : "";
 export function defaultReportFilters(): ReportFilters {
   const today = new Date().toISOString().slice(0, 10);
