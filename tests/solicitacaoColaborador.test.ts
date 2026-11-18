@@ -80,3 +80,22 @@ test("nome da solicitação não é resolvido pelo catálogo nem pelo resumo pri
   assert.match(fluxo,/ro_nomes_colaboradores_solicitacoes/);
   assert.doesNotMatch(fluxo,/ro_catalogo_colaboradores_viagem|ro_obter_colaborador_resumo/);
 });
+
+const relatorios = readFileSync(new URL("../src/Relatorios.tsx", import.meta.url), "utf8");
+test("relatório financeiro usa resolução segura para colaborador privado, tradicional e manual", () => {
+  assert.match(relatorios, /resolveSolicitacaoFuncionarioNome\(item\.solicitacao, nomesColaboradores\[item\.solicitacao\.id\]\)/);
+  assert.match(relatorios, /idsSolicitacoesParaResolver\(/);
+  assert.match(relatorios, /mapearNomesColaboradoresSolicitacoes\(nomes\)/);
+  assert.match(relatorios, /funcionario_id,colaborador_id,funcionario:/);
+  const privado = row({ funcionario_id: null, colaborador_id: "p1" });
+  const tradicional = row({ funcionario_id: "f1", colaborador_id: null, funcionario: { id: "f1", nome: "FUNCIONÁRIO TRADICIONAL" } });
+  const manual = row({ funcionario_id: null, colaborador_id: null, viajante_nome_informado: "  NOME MANUAL  " });
+  assert.equal(resolveSolicitacaoFuncionarioNome(privado, "COLABORADOR PRIVADO"), "COLABORADOR PRIVADO");
+  assert.equal(resolveSolicitacaoFuncionarioNome(tradicional), "FUNCIONÁRIO TRADICIONAL");
+  assert.equal(resolveSolicitacaoFuncionarioNome(manual), "NOME MANUAL");
+});
+test("falha na consulta complementar não bloqueia o relatório financeiro", () => {
+  assert.match(relatorios, /if \(!nomesErro\) setNomesColaboradores/);
+  assert.match(relatorios, /catch \{/);
+  assert.doesNotMatch(relatorios, /if \(nomesErro\) setErro/);
+});
