@@ -1,4 +1,4 @@
--- Real production helper definitions, read-only captured; synthetic tables are in rpc-fixture.sql.
+-- Real production helper definitions, in dependency order.
 CREATE OR REPLACE FUNCTION public.ro_can_operate(p_user uuid DEFAULT auth.uid())
  RETURNS boolean
  LANGUAGE sql
@@ -13,6 +13,33 @@ AS $function$
   );
 $function$
 ;
+CREATE OR REPLACE FUNCTION public.ro_is_rh_active(p_user_id uuid DEFAULT auth.uid())
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  select exists(select 1 from public.ro_rh_responsaveis r where r.user_id=p_user_id and r.ativo);
+$function$
+;
+CREATE OR REPLACE FUNCTION public.ro_is_operador_ativo(p_user uuid DEFAULT auth.uid())
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  select p_user is not null and exists(select 1 from public.ro_responsaveis r where r.user_id=p_user and r.ativo);
+$function$
+;
+CREATE OR REPLACE FUNCTION public.ro_can_manage_private_addresses(p_user uuid DEFAULT auth.uid())
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'auth', 'pg_temp'
+AS $function$
+  select p_user is not null and (coalesce(public.ro_is_rh_active(p_user),false) or exists(select 1 from auth.users u where u.id=p_user and lower(u.email)=lower('fernanda.souza@tanksbr.com.br')));
+$function$
+;
 CREATE OR REPLACE FUNCTION public.ro_can_view_private_addresses(p_user uuid DEFAULT auth.uid())
  RETURNS boolean
  LANGUAGE sql
@@ -20,6 +47,29 @@ CREATE OR REPLACE FUNCTION public.ro_can_view_private_addresses(p_user uuid DEFA
  SET search_path TO 'public', 'auth', 'pg_temp'
 AS $function$
   select public.ro_can_manage_private_addresses(p_user) or coalesce(public.ro_is_operador_ativo(p_user),false);
+$function$
+;
+CREATE OR REPLACE FUNCTION public.ro_is_admin(p_user uuid DEFAULT auth.uid())
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select exists (
+    select 1
+    from public.user_roles
+    where user_id = p_user
+      and role::text in ('gerente','diretor')
+  );
+$function$
+;
+CREATE OR REPLACE FUNCTION public.ro_can_view_all(p_user uuid DEFAULT auth.uid())
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select public.ro_can_operate(p_user) or public.ro_is_admin(p_user);
 $function$
 ;
 CREATE OR REPLACE FUNCTION public.ro_catalogo_centros_custo()
@@ -69,15 +119,6 @@ AS $function$
     );
 $function$
 ;
-CREATE OR REPLACE FUNCTION public.ro_is_rh_active(p_user_id uuid DEFAULT auth.uid())
- RETURNS boolean
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-  select exists(select 1 from public.ro_rh_responsaveis r where r.user_id=p_user_id and r.ativo);
-$function$
-;
 CREATE OR REPLACE FUNCTION public.ro_motivo_possui_retorno(p_motivo text)
  RETURNS boolean
  LANGUAGE sql
@@ -104,45 +145,4 @@ begin
     values(v_sol.id,'interno','ro',v_ro.user_id::text,format('Nova solicitação de passagem liberada para %s, motivo %s, origem %s, destino %s.',coalesce(v_nome,'Viajante não identificado'),v_sol.motivo,v_sol.origem,v_sol.destino));
   end loop;
 end $function$
-;
-CREATE OR REPLACE FUNCTION public.ro_can_manage_private_addresses(p_user uuid DEFAULT auth.uid())
- RETURNS boolean
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public', 'auth', 'pg_temp'
-AS $function$
-  select p_user is not null and (coalesce(public.ro_is_rh_active(p_user),false) or exists(select 1 from auth.users u where u.id=p_user and lower(u.email)=lower('fernanda.souza@tanksbr.com.br')));
-$function$
-;
-CREATE OR REPLACE FUNCTION public.ro_is_operador_ativo(p_user uuid DEFAULT auth.uid())
- RETURNS boolean
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-  select p_user is not null and exists(select 1 from public.ro_responsaveis r where r.user_id=p_user and r.ativo);
-$function$
-;
-CREATE OR REPLACE FUNCTION public.ro_can_view_all(p_user uuid DEFAULT auth.uid())
- RETURNS boolean
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-  select public.ro_can_operate(p_user) or public.ro_is_admin(p_user);
-$function$
-;
-CREATE OR REPLACE FUNCTION public.ro_is_admin(p_user uuid DEFAULT auth.uid())
- RETURNS boolean
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-  select exists (
-    select 1
-    from public.user_roles
-    where user_id = p_user
-      and role::text in ('gerente','diretor')
-  );
-$function$
 ;
