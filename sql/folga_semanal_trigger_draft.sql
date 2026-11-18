@@ -73,8 +73,10 @@ begin
   if new.funcionario_id is not null then
     v_identidade_funcionario := new.funcionario_id;
   end if;
+  -- Mesma chave usada por ro_private.preparar_episodio_folga.
+  -- Funcionario vinculado: UUID sem prefixo; privado independente: prefixo privado:.
   v_identidade_chave := case when v_identidade_funcionario is not null
-    then 'funcionario:'||v_identidade_funcionario::text
+    then v_identidade_funcionario::text
     else 'privado:'||new.colaborador_id::text end;
   perform pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(v_identidade_chave,904)
