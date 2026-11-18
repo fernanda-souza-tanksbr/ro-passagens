@@ -34,7 +34,7 @@ END $$;
 INSERT INTO public.ro_funcionarios_enderecos_privados(id,funcionario_id,ativo,nome)
  VALUES ('00000000-0000-0000-0000-000000000881','00000000-0000-0000-0000-000000000801',true,'Privado Vinculado Ficticio');
 -- The real private-access predicate must grant an active operator and deny an unprivileged user.
-DO $ BEGIN
+DO $body$ BEGIN
  IF public.ro_can_view_private_addresses(auth.uid()) IS DISTINCT FROM true THEN
   RAISE EXCEPTION 'Expected authorized private-access operator';
  END IF;
@@ -45,8 +45,8 @@ DO $ BEGIN
  PERFORM pg_temp.rpc_expect_error(format('SELECT pg_temp.rpc_create(915,%L::date,100,NULL,%L::uuid)',current_date+150,'00000000-0000-0000-0000-000000000881'),'COLABORADOR_PRIVADO_ACESSO_NEGADO');
  PERFORM set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',false);
  RAISE NOTICE 'PASS private-access authorization: operator allowed, unprivileged user denied';
-END $;
-DO $ DECLARE d date:=current_date+100; BEGIN
+END $body$;
+DO $body$ DECLARE d date:=current_date+100; BEGIN
  PERFORM pg_temp.rpc_expect_error(format('SELECT pg_temp.rpc_create(911,%L::date,100,NULL,%L::uuid)',d,'00000000-0000-0000-0000-000000000881'),'FOLGA_FUTURA_DUPLICADA');
  PERFORM pg_temp.rpc_expect_error(format('SELECT pg_temp.rpc_create(912,%L::date,100,%L::uuid,%L::uuid)',d+35,'00000000-0000-0000-0000-000000000802','00000000-0000-0000-0000-000000000881'),'VINCULO_FUNCIONARIO_INCONSISTENTE');
  PERFORM pg_temp.rpc_expect_error(format('SELECT pg_temp.rpc_create(913,%L::date,100,%L::uuid)',d+35,'00000000-0000-0000-0000-000000000888'),'FUNCIONARIO_INDISPONIVEL');
