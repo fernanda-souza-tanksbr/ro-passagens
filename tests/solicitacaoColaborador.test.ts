@@ -99,3 +99,10 @@ test("falha na consulta complementar não bloqueia o relatório financeiro", () 
   assert.match(relatorios, /catch \{/);
   assert.doesNotMatch(relatorios, /if \(nomesErro\) setErro/);
 });
+
+test("resolvedor aceita relacoes ausentes e nulas em consultas resumidas", () => {
+  assert.equal(resolveSolicitacaoFuncionarioNome({ funcionario_id: "f1", funcionario: null }), null);
+  assert.equal(resolveSolicitacaoFuncionarioNome({ colaborador_id: "p1" }, " PRIVADO "), "PRIVADO");
+  assert.equal(resolveSolicitacaoFuncionarioNome({ funcionario_id: "f1", funcionario: { nome: "TRADICIONAL" } }), "TRADICIONAL");
+  assert.equal(resolveSolicitacaoFuncionarioNome({ viajante_nome_informado: " MANUAL " }), "MANUAL");
+});
