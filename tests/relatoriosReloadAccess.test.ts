@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import fs from "node:fs";
-import { EMPTY_ACCESS } from "../src/accessCache.ts";
+const EMPTY_ACCESS = { canViewAll: false, isRh: false, canImport: false };
 import { reportRouteDecision } from "../src/reportRouteDecision.ts";
 import { defaultReportViewState, normalizeReportFilters, readReportViewState, writeReportViewState } from "../src/relatoriosPersistence.ts";
 
