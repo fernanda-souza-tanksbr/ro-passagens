@@ -104,14 +104,23 @@ jobs:
           if(url) {
             try {
               const parsed=new URL(url);
-              if(!['https:','http:'].includes(parsed.protocol) || !parsed.hostname ||
-                 parsed.username || parsed.password || parsed.search || parsed.hash ||
-                 parsed.pathname!=='/' ||
-                 parsed.hostname!==process.env.VITE_SUPABASE_PROJECT_ID+'.supabase.co') {
-                throw Error('Invalid Supabase project URL');
+              const checks=[
+                ['protocol', ['https:','http:'].includes(parsed.protocol)],
+                ['hostname_present', Boolean(parsed.hostname)],
+                ['credentials_absent', !parsed.username && !parsed.password],
+                ['query_and_fragment_absent', !parsed.search && !parsed.hash],
+                ['root_path', parsed.pathname==='/'],
+                ['hostname_matches_project_id', parsed.hostname===process.env.VITE_SUPABASE_PROJECT_ID+'.supabase.co'],
+                ['expected_project_id', process.env.VITE_SUPABASE_PROJECT_ID==='hukhwirdrpylxpaedjbc'],
+                ['no_surrounding_whitespace', url===url.trim()],
+              ];
+              const failed=checks.filter(([,passed])=>!passed).map(([name])=>name);
+              if(failed.length) {
+                console.error('Supabase URL validation failed checks: '+failed.join(', '));
+                process.exitCode=1;
               }
             } catch {
-              console.error('Invalid VITE_SUPABASE_URL for the selected Supabase project');
+              console.error('Supabase URL validation failed check: URL_parse');
               process.exitCode=1;
             }
           }
