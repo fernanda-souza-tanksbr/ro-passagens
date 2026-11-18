@@ -1,0 +1,203 @@
+name: Homologar correcao nome funcionario DISTANCIA (manual)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: relatorio-nome-distancia-preparacao
+  cancel-in-progress: false
+jobs:
+  validar-e-preparar:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      VERCEL_TELEMETRY_DISABLED: '1'
+      VERCEL_CLI_VERSION: '63.1.2'
+      SOURCE_SHA: ff6f22ee651015e23b014b62246f1365c279294e
+    steps:
+      - name: Verificar alvo e variaveis sem exibir valores
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VERCEL_ORG_ID"
+          test -n "$VERCEL_PROJECT_ID"
+          test "$VERCEL_ORG_ID" = "team_SqKFvMyAmjRyfIDwxZqJMJj3"
+          test "$VERCEL_PROJECT_ID" = "prj_wkU8FwnRO2QqWzHfygeXUC289Jgs"
+      - name: Checkout exclusivo do commit revisado
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ff6f22ee651015e23b014b62246f1365c279294e
+          persist-credentials: false
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Instalar CLI fixa e dependencias revisadas
+        run: |
+          set -euo pipefail
+          npm install --global "vercel@${VERCEL_CLI_VERSION}"
+          test "$(vercel --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)" = "$VERCEL_CLI_VERSION"
+          npm ci
+      - name: Validar commit e executar verificacoes
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          npm run typecheck
+          npm test
+          npm run build
+      - name: Preparar manifesto DISTANCIA
+        run: |
+          set -euo pipefail
+          printf '{"modo":"distancia","versao_minima":2}\n' > public/folga-campo-release.json
+          node --input-type=module -e "import fs from 'node:fs';const x=JSON.parse(fs.readFileSync('public/folga-campo-release.json'));if(x.modo!=='distancia'||x.versao_minima!==2)process.exit(1)"
+      - name: Vincular projeto e obter configuracao de producao
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$VERCEL_TOKEN"
+          mkdir -p .vercel
+          printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
+          vercel pull --yes --environment=production --scope tanks
+      - name: Construir DISTANCIA com Supabase explicitamente carregado
+        env:
+          VITE_FOLGA_CAMPO_KM_ENABLED: C2_PRODUCAO_APROVADA
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # vercel pull writes production build variables here; the CLI build
+          # must inherit them explicitly rather than relying on implicit loading.
+          test -f .vercel/.env.production.local
+          set -a
+          source .vercel/.env.production.local
+          set +a
+          # Public URL is pinned to the verified Supabase project for this C2 build.
+          # Report only whether the Vercel-loaded value matches; never echo it.
+          if [ "${VITE_SUPABASE_URL:-}" = 'https://hukhwirdrpylxpaedjbc.supabase.co' ]; then
+            echo 'VITE_SUPABASE_URL from Vercel: MATCH'
+          else
+            echo 'VITE_SUPABASE_URL from Vercel: MISMATCH'
+          fi
+          export VITE_SUPABASE_URL='https://hukhwirdrpylxpaedjbc.supabase.co'
+          export VITE_SUPABASE_PROJECT_ID='hukhwirdrpylxpaedjbc'
+          export VITE_FOLGA_CAMPO_KM_ENABLED='C2_PRODUCAO_APROVADA'
+          node --input-type=module <<'NODE'
+          if(process.env.VITE_FOLGA_CAMPO_KM_ENABLED !== ('C2_PRODUCAO_APROVADA')) throw Error('Incorrect C2 build flag');
+          const publicKey=process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+          const keyFormatValid=typeof publicKey==='string' && (
+            (publicKey.startsWith('sb_publishable_') && publicKey.length>20) ||
+            (publicKey.startsWith('eyJ') && publicKey.split('.').length===3)
+          );
+          if(!keyFormatValid) {
+            console.error('Invalid VITE_SUPABASE_PUBLISHABLE_KEY format (value hidden)');
+            process.exit(1);
+          }
+          if(process.env.VITE_SUPABASE_URL!=='https://hukhwirdrpylxpaedjbc.supabase.co' ||
+             process.env.VITE_SUPABASE_PROJECT_ID!=='hukhwirdrpylxpaedjbc') {
+            console.error('Public Supabase project configuration mismatch');
+            process.exit(1);
+          }
+          const required=['VITE_SUPABASE_URL','VITE_SUPABASE_PUBLISHABLE_KEY','VITE_SUPABASE_PROJECT_ID'];
+          for(const name of required) {
+            const value=process.env[name]?.trim();
+            if(!value || value==='undefined' || value==='null' || value.includes('placeholder')) {
+              console.error('Missing or invalid public build variable: '+name);
+              process.exitCode=1;
+            }
+          }
+          const url=process.env.VITE_SUPABASE_URL;
+          if(url) {
+            // Only new URL() belongs to the parsing catch. Never log raw values.
+            let parsed;
+            try {
+              parsed=new URL(url);
+            } catch (error) {
+              const trimmed=url.trim();
+              const quote=String.fromCharCode(34);
+              const apostrophe=String.fromCharCode(39);
+              const slash=String.fromCharCode(92);
+              const category =
+                !trimmed ? 'empty_or_whitespace' :
+                [quote,apostrophe].includes(trimmed[0]) ||
+                  [quote,apostrophe].includes(trimmed.at(-1)) ? 'literal_quotes' :
+                url.includes(slash+quote) || url.includes(slash+apostrophe) ? 'escape_characters' :
+                trimmed.startsWith('${') || trimmed.startsWith('$VITE_') ||
+                  trimmed.startsWith('{{') ? 'unresolved_reference' :
+                [13,10,9].some(code=>url.includes(String.fromCharCode(code))) ? 'control_characters' :
+                trimmed.startsWith('https://') || trimmed.startsWith('http://') ? 'malformed_http_url' :
+                'not_http_url_or_other_invalid_format';
+              console.error('Supabase URL parsing failed; safe category: '+category);
+              process.exit(1);
+            }
+            const checks=[
+              ['protocol', ['https:','http:'].includes(parsed.protocol)],
+              ['hostname_present', Boolean(parsed.hostname)],
+              ['credentials_absent', !parsed.username && !parsed.password],
+              ['query_and_fragment_absent', !parsed.search && !parsed.hash],
+              ['root_path', parsed.pathname==='/'],
+              ['hostname_matches_project_id', parsed.hostname===process.env.VITE_SUPABASE_PROJECT_ID+'.supabase.co'],
+              ['expected_project_id', process.env.VITE_SUPABASE_PROJECT_ID==='hukhwirdrpylxpaedjbc'],
+              ['no_surrounding_whitespace', url===url.trim()],
+            ];
+            const failed=checks.filter(([,passed])=>!passed).map(([name])=>name);
+            if(failed.length) {
+              console.error('Supabase URL validation failed checks: '+failed.join(', '));
+              process.exit(1);
+            }
+          }
+          NODE
+          test -n "${VITE_SUPABASE_URL:-}"
+          test -n "${VITE_SUPABASE_PUBLISHABLE_KEY:-}"
+          test -n "${VITE_SUPABASE_PROJECT_ID:-}"
+          vercel build --prod --scope tanks
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const root='.vercel/output/static';
+          const manifest=JSON.parse(fs.readFileSync(path.join(root,'folga-campo-release.json')));
+          if(manifest.modo!==('distancia') ||
+             manifest.versao_minima!==2) throw Error('Invalid release manifest');
+          const bundles=fs.readdirSync(path.join(root,'assets'))
+            .filter(name=>name.endsWith('.js'))
+            .map(name=>fs.readFileSync(path.join(root,'assets',name),'utf8'));
+          const contains=value=>bundles.some(js=>js.includes(value));
+          if(!contains(process.env.VITE_SUPABASE_URL) ||
+             !contains(process.env.VITE_SUPABASE_PUBLISHABLE_KEY)) {
+            throw Error('Supabase public configuration not embedded in JavaScript bundle');
+          }
+          if(!bundles.some(js=>js.includes('C2_PRODUCAO_APROVADA'))) throw Error('C2 flag missing from bundle');
+          console.log('Public Supabase URL/key, DISTANCIA flag and release manifest verified (values hidden)');
+          NODE
+      - name: Preparar deployment sem atribuir dominios
+        id: stage
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          url="$(vercel deploy --prebuilt --prod --skip-domain --scope tanks)"
+          DEPLOYMENT_URL="$url" node --input-type=module -e "const u=new URL(process.env.DEPLOYMENT_URL);if(u.protocol!=='https:'||!u.hostname.endsWith('.vercel.app'))process.exit(1)"
+          printf 'deployment_url=%s\n' "$url" >> "$GITHUB_OUTPUT"
+          printf 'Deployment DISTANCIA preparado sem promocao: %s\n' "$url"
+      - name: Registrar URL e commit (sem promocao)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          DEPLOYMENT_URL: ${{ steps.stage.outputs.deployment_url }}
+        run: |
+          printf 'Commit revisado: %s\n' "$SOURCE_SHA"
+          printf 'Variante: DISTANCIA; alvo: production; dominios: skip-domain\n'
+          printf 'Inspecionar deployment e aliases antes de qualquer etapa seguinte: %s\n' "$DEPLOYMENT_URL"
+          VERCEL_TOKEN="${VERCEL_TOKEN:?}" vercel inspect "$DEPLOYMENT_URL" --json --scope tanks > /tmp/deployment-inspect.json
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const d=JSON.parse(fs.readFileSync('/tmp/deployment-inspect.json','utf8'));
+          const id=d.id || d.deployment?.id;
+          if(!/^dpl_[A-Za-z0-9]+$/.test(id||'')) throw Error('Deployment ID missing');
+          const url=process.env.DEPLOYMENT_URL;
+          console.log('Deployment ID: '+id);
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,`Commit: ${process.env.SOURCE_SHA}\n\nDeployment: ${id}\n\nURL isolada: ${url}\n\nSem promocao ou alteracao de aliases.\n`);
+          NODE
