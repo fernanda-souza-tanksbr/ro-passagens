@@ -40,6 +40,7 @@ jobs:
         run: |
           set -euo pipefail
           psql -X -v ON_ERROR_STOP=1 -f tests/postgres/fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/postgres/production-dependencies.sql
           psql -X -v ON_ERROR_STOP=1 -f sql/folga_semanal_rollback.sql
           psql -XAt -c "select pg_get_functiondef('public.ro_validar_ciclo_folga_campo()'::regprocedure)" > /tmp/trigger-original.txt
           psql -XAt -c "select pg_get_triggerdef(oid) from pg_trigger where tgname='ro_validar_ciclo_folga_campo'" > /tmp/trigger-original-definition.txt
