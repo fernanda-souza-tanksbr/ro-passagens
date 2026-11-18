@@ -8,7 +8,14 @@ export type SolicitacaoColaboradorResolvido = {
   privadoIdOpcional: string | null;
 };
 
-type SolicitacaoPessoa = Pick<Solicitacao, "funcionario_id" | "colaborador_id" | "viajante_nome_informado" | "funcionario" | "colaborador">;
+// Contrato estrutural minimo: consultas resumidas nao precisam carregar as relacoes.
+type SolicitacaoPessoa = {
+  funcionario_id?: string | null;
+  colaborador_id?: string | null;
+  viajante_nome_informado?: string | null;
+  funcionario?: { nome: string } | null;
+  colaborador?: { nome: string } | null;
+};
 
 export type NomeColaboradorSolicitacaoSeguro = {
   solicitacao_id: string;
