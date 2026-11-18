@@ -73,3 +73,10 @@ INSERT INTO public.obras(id,nome) VALUES
  ('00000000-0000-0000-0000-000000000899','Obra Ficticia');
 INSERT INTO public.user_roles(user_id,role) VALUES
  ('00000000-0000-0000-0000-000000000001','coordenador');
+
+-- Authorized operational user (real ro_can_view_private_addresses -> ro_is_operador_ativo).
+-- Separate authenticated user exists but has no operational/RH privileges.
+INSERT INTO public.ro_responsaveis(user_id,ativo)
+ VALUES ('00000000-0000-0000-0000-000000000001',true);
+INSERT INTO auth.users(id,email)
+ VALUES ('00000000-0000-0000-0000-000000000002','unauthorized@example.invalid');
