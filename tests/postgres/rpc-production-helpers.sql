@@ -105,3 +105,44 @@ begin
   end loop;
 end $function$
 ;
+CREATE OR REPLACE FUNCTION public.ro_can_manage_private_addresses(p_user uuid DEFAULT auth.uid())
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'auth', 'pg_temp'
+AS $function$
+  select p_user is not null and (coalesce(public.ro_is_rh_active(p_user),false) or exists(select 1 from auth.users u where u.id=p_user and lower(u.email)=lower('fernanda.souza@tanksbr.com.br')));
+$function$
+;
+CREATE OR REPLACE FUNCTION public.ro_is_operador_ativo(p_user uuid DEFAULT auth.uid())
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  select p_user is not null and exists(select 1 from public.ro_responsaveis r where r.user_id=p_user and r.ativo);
+$function$
+;
+CREATE OR REPLACE FUNCTION public.ro_can_view_all(p_user uuid DEFAULT auth.uid())
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select public.ro_can_operate(p_user) or public.ro_is_admin(p_user);
+$function$
+;
+CREATE OR REPLACE FUNCTION public.ro_is_admin(p_user uuid DEFAULT auth.uid())
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select exists (
+    select 1
+    from public.user_roles
+    where user_id = p_user
+      and role::text in ('gerente','diretor')
+  );
+$function$
+;
