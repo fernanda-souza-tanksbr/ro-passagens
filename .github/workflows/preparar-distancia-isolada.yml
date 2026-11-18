@@ -52,18 +52,54 @@ jobs:
           mkdir -p .vercel
           printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
           vercel pull --yes --environment=production --scope tanks --token "$VERCEL_TOKEN"
+          # Install a pinned .env parser outside the checked-out repository.
+          npm install --prefix /tmp/folga-dotenv --ignore-scripts --no-audit --no-fund --silent dotenv@16.4.5
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
-          const project = JSON.parse(fs.readFileSync('.vercel/project.json','utf8'));
-          if (project.orgId !== process.env.VERCEL_ORG_ID || project.projectId !== process.env.VERCEL_PROJECT_ID) throw Error('Unexpected Vercel project/team');
-          const envFile = '.vercel/.env.production.local';
-          const contents = fs.readFileSync(envFile,'utf8');
-          const values = Object.fromEntries(contents.split(/\r?\n/).filter(line => /^[A-Za-z_][A-Za-z_0-9]*=/.test(line)).map(line => { const i=line.indexOf('=');return [line.slice(0,i),line.slice(i+1).replace(/^["']|["']$/g,'')]; }));
-          const url = values.VITE_SUPABASE_URL || '';
-          if (!url.includes('hukhwirdrpylxpaedjbc.supabase.co')) throw Error('Unexpected Supabase production URL');
-          if (values.VITE_SUPABASE_PROJECT_ID !== 'hukhwirdrpylxpaedjbc') throw Error('Unexpected Supabase project ID');
-          if (!values.VITE_SUPABASE_ANON_KEY && !values.VITE_SUPABASE_PUBLISHABLE_KEY) throw Error('Missing public Supabase client key');
-          console.log('Validated production Supabase project ID, URL and presence of client key (values redacted).');
+          import dotenv from '/tmp/folga-dotenv/node_modules/dotenv/lib/main.js';
+          const expectedId = 'hukhwirdrpylxpaedjbc';
+          const expectedUrl = 'https://hukhwirdrpylxpaedjbc.supabase.co';
+          const project = JSON.parse(fs.readFileSync('.vercel/project.json', 'utf8'));
+          if (project.orgId !== process.env.VERCEL_ORG_ID || project.projectId !== process.env.VERCEL_PROJECT_ID) {
+            throw Error('Vercel team/project identity mismatch');
+          }
+          console.log('Vercel team/project identity: matching');
+          const values = dotenv.parse(fs.readFileSync('.vercel/.env.production.local'));
+          let failed = false;
+          function fail(reason) { console.error('::error::' + reason); failed = true; }
+          const urlRaw = values.VITE_SUPABASE_URL;
+          console.log('VITE_SUPABASE_URL: ' + (urlRaw === undefined ? 'absent' : 'present'));
+          if (urlRaw === undefined || urlRaw.length === 0) {
+            fail('VITE_SUPABASE_URL absent or empty');
+          } else {
+            const candidate = urlRaw.trim();
+            let parsed;
+            try { parsed = new URL(candidate); } catch { fail('VITE_SUPABASE_URL invalid URL syntax after dotenv parsing'); }
+            if (parsed) {
+              const valid = parsed.protocol === 'https:' && parsed.username === '' && parsed.password === '' && parsed.search === '' && parsed.hash === '' && parsed.pathname === '/' && parsed.port === '';
+              console.log('VITE_SUPABASE_URL format: ' + (valid ? 'valid HTTPS origin' : 'invalid HTTPS origin format'));
+              if (!valid) fail('VITE_SUPABASE_URL has an unexpected scheme, port, credentials, path, query or fragment');
+              const normalized = parsed.origin;
+              const matches = valid && normalized === expectedUrl;
+              console.log('VITE_SUPABASE_URL project: ' + (matches ? 'matching' : 'divergent'));
+              if (!matches && valid) fail('VITE_SUPABASE_URL hostname differs from approved Supabase project');
+            }
+            if (candidate !== urlRaw) console.log('VITE_SUPABASE_URL formatting: surrounding whitespace normalized');
+          }
+          const idRaw = values.VITE_SUPABASE_PROJECT_ID;
+          console.log('VITE_SUPABASE_PROJECT_ID: ' + (idRaw === undefined ? 'absent' : 'present'));
+          const idMatches = idRaw === expectedId;
+          console.log('VITE_SUPABASE_PROJECT_ID project: ' + (idMatches ? 'matching' : 'divergent'));
+          if (!idMatches) {
+            if (idRaw === undefined || idRaw.length === 0) fail('VITE_SUPABASE_PROJECT_ID absent or empty');
+            else if (idRaw.trim() === expectedId) fail('VITE_SUPABASE_PROJECT_ID differs only by surrounding whitespace; exact match required');
+            else fail('VITE_SUPABASE_PROJECT_ID differs from approved Supabase project');
+          }
+          const hasPublicKey = Boolean(values.VITE_SUPABASE_ANON_KEY || values.VITE_SUPABASE_PUBLISHABLE_KEY);
+          console.log('Supabase public client key: ' + (hasPublicKey ? 'present' : 'absent'));
+          if (!hasPublicKey) fail('Missing public Supabase client key');
+          if (failed) process.exit(1);
+          console.log('Production Supabase identity: verified; no values disclosed');
           NODE
       - name: Build approved source with production VITE variables
         env:
