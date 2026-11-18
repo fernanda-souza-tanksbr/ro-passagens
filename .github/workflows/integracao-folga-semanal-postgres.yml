@@ -89,6 +89,7 @@ jobs:
         run: |
           set -euo pipefail
           psql -X -v ON_ERROR_STOP=1 -f tests/postgres/rpc-fixture.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/postgres/rpc-production-helpers.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/postgres/rpc-production-chain.sql
           echo 'PASS: definicoes reais da cadeia RPC carregadas' >> "$GITHUB_STEP_SUMMARY"
       - name: Executar RPC completa em banco isolado
@@ -98,6 +99,7 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f tests/postgres/rpc-integration.sql
           echo 'PASS: ro_criar_folga_campo_com_distancia invocada com sucesso' >> "$GITHUB_STEP_SUMMARY"
       - name: Rollback e comparacao de definicoes
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
