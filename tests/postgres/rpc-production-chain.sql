@@ -657,3 +657,77 @@ begin
  return v_id;
 end $function$
 ;
+
+-- public.ro_criar_solicitacao_validada_pre_operacional(jsonb,jsonb)
+CREATE OR REPLACE FUNCTION public.ro_criar_solicitacao_validada_pre_operacional(p_solicitacao jsonb, p_documentos jsonb DEFAULT '[]'::jsonb)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'storage', 'pg_temp'
+AS $function$
+declare v_id uuid:=coalesce(nullif(p_solicitacao->>'id','')::uuid,gen_random_uuid());v_doc jsonb;v_obj storage.objects%rowtype;v_justificativa text;v_motivo text:=nullif(p_solicitacao->>'motivo','');v_tem_retorno boolean;v_retorno_indefinido boolean;v_destino_tipo text;v_destino_justificativa text;
+begin
+  v_tem_retorno:=public.ro_motivo_possui_retorno(v_motivo);v_retorno_indefinido:=v_tem_retorno and coalesce((p_solicitacao->>'retorno_indefinido')::boolean,false);
+  v_justificativa:=case when coalesce((p_solicitacao->>'solicitar_excecao_prazo')::boolean,false) then nullif(trim(p_solicitacao->>'justificativa_excecao_prazo'),'') end;
+  v_destino_tipo:=case when v_motivo in ('ferias','folga_campo','recesso') and coalesce((p_solicitacao->>'usar_destino_excepcional')::boolean,false) then 'excepcional' when v_motivo in ('ferias','folga_campo','recesso') then 'rh' end;
+  v_destino_justificativa:=case when v_destino_tipo='excepcional' then nullif(trim(p_solicitacao->>'destino_residencial_justificativa'),'') end;
+  for v_doc in select value from jsonb_array_elements(coalesce(p_documentos,'[]'::jsonb)) loop
+    select * into v_obj from storage.objects o where o.bucket_id='ro-documentos-internos' and o.name=v_doc->>'storage_path' and o.owner_id::text=auth.uid()::text;
+    if not found then raise exception 'DOCUMENTO_NAO_ENCONTRADO_OU_SEM_PERMISSAO';end if;if (v_doc->>'storage_path') not like v_id::text||'/'||(v_doc->>'categoria')||'/%' then raise exception 'CAMINHO_DOCUMENTO_INVALIDO';end if;
+    if coalesce(v_obj.metadata->>'mimetype','')<>'application/pdf' or lower(storage.extension(v_obj.name))<>'pdf' then raise exception 'DOCUMENTO_NAO_PDF';end if;if coalesce((v_obj.metadata->>'size')::bigint,0)<=0 or (v_obj.metadata->>'size')::bigint>10485760 then raise exception 'DOCUMENTO_TAMANHO_INVALIDO';end if;
+    insert into public.ro_passagem_documentos_internos(id,solicitacao_id,categoria,storage_path,arquivo_nome,mime_type,tamanho_bytes,created_by) values(gen_random_uuid(),v_id,v_doc->>'categoria',v_doc->>'storage_path',v_doc->>'arquivo_nome','application/pdf',(v_obj.metadata->>'size')::bigint,auth.uid());
+  end loop;
+  insert into public.ro_passagem_solicitacoes(id,funcionario_id,obra_id,solicitante_id,origem,destino,motivo,data_ida,primeiro_embarque_em,data_retorno,destino_retorno,centro_custo_retorno_id,retorno_indefinido,centro_custo_destino_id,desligamento_subtipo,prazo_excecao_justificativa,justificativa_excecao_prazo,observacoes_solicitante,solicitacao_origem_id,folga_antecipacao_justificativa,destino_residencial_origem,destino_residencial_justificativa)
+  values(v_id,(p_solicitacao->>'funcionario_id')::uuid,nullif(p_solicitacao->>'obra_id','')::uuid,auth.uid(),p_solicitacao->>'origem',p_solicitacao->>'destino',v_motivo,nullif(p_solicitacao->>'data_ida','')::date,null,case when v_tem_retorno then nullif(p_solicitacao->>'data_retorno','')::date end,case when v_tem_retorno and not v_retorno_indefinido then nullif(trim(p_solicitacao->>'destino_retorno'),'') end,case when v_tem_retorno and not v_retorno_indefinido then nullif(p_solicitacao->>'centro_custo_retorno_id','')::uuid end,v_retorno_indefinido,nullif(p_solicitacao->>'centro_custo_destino_id','')::uuid,nullif(p_solicitacao->>'desligamento_subtipo',''),v_justificativa,v_justificativa,nullif(p_solicitacao->>'observacoes_solicitante',''),nullif(p_solicitacao->>'solicitacao_origem_id','')::uuid,nullif(trim(p_solicitacao->>'folga_antecipacao_justificativa'),''),v_destino_tipo,v_destino_justificativa);
+  insert into public.ro_auditoria_interna(evento,solicitacao_id,detalhes,criado_por) select 'solicitacao_validada',v_id,jsonb_build_object('regra',s.prazo_regra_codigo,'tipo',s.prazo_tipo,'quantidade',s.prazo_quantidade,'data_minima',s.data_minima_permitida,'data_ida',s.data_ida,'excecao',s.prazo_excecao,'destino_residencial_origem',s.destino_residencial_origem),auth.uid() from public.ro_passagem_solicitacoes s where s.id=v_id;
+  insert into public.ro_auditoria_interna(evento,solicitacao_id,detalhes,criado_por) select 'documento_interno_anexado',v_id,jsonb_build_object('categoria',d.categoria),auth.uid() from public.ro_passagem_documentos_internos d where d.solicitacao_id=v_id;return v_id;
+end $function$
+;
+
+-- public.ro_approval_exempt(uuid)
+CREATE OR REPLACE FUNCTION public.ro_approval_exempt(p_user uuid DEFAULT auth.uid())
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select 
+    p_user is not null 
+    and (
+      coalesce(public.ro_can_operate(p_user),false)
+      or coalesce(public.ro_is_rh_active(p_user),false)
+      or exists(
+        select 1 
+        from public.user_roles r 
+        where r.user_id=p_user 
+          and r.role::text in('gerente','diretor')
+      )
+    );
+$function$
+;
+
+-- public.ro_is_approval_candidate(uuid)
+CREATE OR REPLACE FUNCTION public.ro_is_approval_candidate(p_user uuid DEFAULT auth.uid())
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select
+    p_user is not null
+    and (
+      p_user in(
+        '3660689c-1e6f-4e09-b414-3433b44d1681'::uuid,
+        '0811a9c7-b52e-4213-9086-ffddefbbca16'::uuid,
+        '3a79712c-1f72-4237-9288-71d0fa8d8f93'::uuid,
+        'c8513a17-0c7c-4a46-a632-b6725652daa9'::uuid
+      )
+      or exists(
+        select 1
+        from public.user_roles r
+        where r.user_id=p_user
+          and r.role::text='coordenador'
+      )
+    );
+$function$
+;
