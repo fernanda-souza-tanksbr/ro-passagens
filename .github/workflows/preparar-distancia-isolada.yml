@@ -74,6 +74,8 @@ jobs:
           vercel build --prod --scope tanks
       - name: Stage production deployment without aliases
         id: deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
