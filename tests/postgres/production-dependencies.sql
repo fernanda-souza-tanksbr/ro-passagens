@@ -104,3 +104,4 @@ end $function$
 ;
 CREATE TRIGGER ro_guardar_snapshot_folga BEFORE UPDATE ON public.ro_passagem_solicitacoes FOR EACH ROW EXECUTE FUNCTION public.ro_guardar_snapshot_folga();
 CREATE TRIGGER ro_validar_transicao_operacional BEFORE UPDATE ON public.ro_passagem_solicitacoes FOR EACH ROW EXECUTE FUNCTION public.ro_validar_transicao_operacional();
+CREATE TRIGGER ro_proteger_recusa_terminal BEFORE INSERT OR UPDATE ON public.ro_passagem_solicitacoes FOR EACH ROW EXECUTE FUNCTION public.ro_proteger_recusa_terminal();
