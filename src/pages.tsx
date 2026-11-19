@@ -1267,7 +1267,7 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
   const proximaFolgaPorDistancia=(()=>{
     if(!NOVO_FLUXO_FOLGA_ATIVO||!contextoKmFolga?.ultima_folga_data_ida)return null;
     const km=contextoKmFolga.distancia_km
-      ?? (/^\\d+$/.test(kmFolgaInformado.trim())?Number(kmFolgaInformado.trim()):null);
+      ?? (/^\d+$/.test(kmFolgaInformado.trim())?Number(kmFolgaInformado.trim()):null);
     if(km===null||!Number.isSafeInteger(km))return null;
     try { return adicionarDiasIso(contextoKmFolga.ultima_folga_data_ida,regimePorDistancia(km).intervaloDias); }
     catch { return null; }
@@ -1395,7 +1395,7 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
     if (form.data_retorno && form.data_retorno < form.data_ida) { setErro("A data de retorno não pode ser anterior à data de ida."); return; }
     if(form.motivo==="folga_campo"&&(
       NOVO_FLUXO_FOLGA_ATIVO
-        ? Boolean(contextoKmFolga?.solicitacao_futura_existente_id) && !podePlanejarOutraFolgaSemanal(contextoKmFolga?.distancia_km ?? (/^\\d+$/.test(kmFolgaInformado.trim()) ? Number(kmFolgaInformado.trim()) : null))
+        ? Boolean(contextoKmFolga?.solicitacao_futura_existente_id) && !podePlanejarOutraFolgaSemanal(contextoKmFolga?.distancia_km ?? (/^\d+$/.test(kmFolgaInformado.trim()) ? Number(kmFolgaInformado.trim()) : null))
         : folgaFuturaBloqueia(cicloFolga)
     )){
       setErro(NOVO_FLUXO_FOLGA_ATIVO
