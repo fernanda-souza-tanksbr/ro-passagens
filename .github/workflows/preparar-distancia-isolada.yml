@@ -50,7 +50,12 @@ jobs:
           set -euo pipefail
           node --version
           npm install --global vercel@65.8.0
-          test "$(vercel --version | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' | head -1)" = '65.8.0'
+          vercel_version="$(vercel --version)"
+          echo "$vercel_version"
+          [[ "$vercel_version" == *"65.8.0"* ]] || {
+            echo "::error::Unexpected Vercel CLI version"
+            exit 1
+          }
       - name: Link to existing Tanks project and pull production settings
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
