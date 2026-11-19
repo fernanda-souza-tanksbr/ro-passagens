@@ -40,9 +40,17 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$APPROVED_SHA"
           test -z "$(git status --porcelain)"
+      - name: Use Node.js 24 on runner
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
       - name: Install pinned CLI
         shell: bash
-        run: npm install --global vercel@48.10.2
+        run: |
+          set -euo pipefail
+          node --version
+          npm install --global vercel@65.8.0
+          test "$(vercel --version | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' | head -1)" = '65.8.0'
       - name: Link to existing Tanks project and pull production settings
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
