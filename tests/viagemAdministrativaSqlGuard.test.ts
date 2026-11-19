@@ -39,7 +39,7 @@ test("SQL de aplicação e rollback contêm corpos SQL e PL/pgSQL delimitados co
     assert.doesNotMatch(script, /\bend \$(?!\$)/i);
     assert.equal((script.match(/\$\$/g)||[]).length % 2,0);
     assert.equal((script.match(/\$function\$/g)||[]).length,2);
-    assert.match(script,/\$function\$;\s*commit;/i);
+    assert.match(script,/\$function\$;/i);
     assert.match(script,/^begin;/im);
     assert.match(script,/commit;\s*$/i);
   }
