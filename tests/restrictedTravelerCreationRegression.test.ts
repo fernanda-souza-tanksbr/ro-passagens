@@ -5,7 +5,9 @@ import test from "node:test";
 const migration=readFileSync("supabase/migrations/202610140001_corrige_regressao_disponibilidade_restrito_ro.sql","utf8");
 const previous=readFileSync("supabase/migrations/202610060001_regras_especiais_rh.sql","utf8");
 const helper=readFileSync("supabase/migrations/202609210002_corrige_disponibilidade_viajantes_restrito_ro.sql","utf8");
-// Canonical definition captured read-only from production pg_get_functiondef on 2026-11-19.\n// The historical 202609220001 migration is absent from main and this branch.\nconst catalog=readFileSync("security/fixtures/ro_catalogo_colaboradores_viagem.production.sql","utf8");
+// Canonical definition captured read-only from production pg_get_functiondef on 2026-11-19.
+// The historical 202609220001 migration is absent from main and this branch.
+const catalog=readFileSync("security/fixtures/ro_catalogo_colaboradores_viagem.production.sql","utf8");
 const frontend=readFileSync("src/pages.tsx","utf8");
 const catalogCache=readFileSync("src/catalogCache.ts","utf8");
 const errors=readFileSync("src/creationErrorMessages.ts","utf8");
