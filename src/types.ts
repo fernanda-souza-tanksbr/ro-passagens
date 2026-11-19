@@ -127,6 +127,9 @@ export type Solicitacao = {
   recusada_em: string | null;
   recusada_por: string | null;
   motivo_recusa: string | null;
+  folga_alocacao_id?: string | null;
+  folga_distancia_km?: number | null;
+  folga_intervalo_dias?: number | null;
   folga_data_prevista_ciclo: string | null;
   folga_ciclo_anterior_id: string | null;
   folga_antecipada: boolean;
