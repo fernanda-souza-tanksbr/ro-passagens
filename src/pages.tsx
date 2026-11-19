@@ -1167,9 +1167,9 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
     if(!origem)return;
     supabase.rpc("ro_obter_dados_para_refazer_solicitacao",{p_solicitacao_id:origem}).then(({data:prefill,error})=>{
       if(error||!prefill){setErro("Não foi possível carregar os dados seguros da solicitação recusada.");return;}
-      const p=prefill as Partial<typeof form>;
+      const p=prefill as Partial<typeof form> & {colaborador_id?:string|null};
       const motivo=motivoPrefillPermitido(p.motivo as Motivo|null,motivosPermitidos(access.role,access.isRh));
-      setForm((atual)=>normalizarCamposRetorno({...atual,funcionario_id:p.funcionario_id||"",obra_id:p.obra_id||"",origem:p.origem||"",destino:p.destino||"",motivo:motivo as Motivo|"",desligamento_subtipo:motivo==="desligamento"?(p.desligamento_subtipo||"") as DesligamentoSubtipo|"":"",data_ida:p.data_ida||"",data_retorno:p.data_retorno||"",destino_retorno:p.destino_retorno||"",centro_custo_retorno_id:p.centro_custo_retorno_id||"",retorno_indefinido:Boolean(p.retorno_indefinido),centro_custo_destino_id:p.centro_custo_destino_id||"",observacoes_solicitante:p.observacoes_solicitante||"",solicitacao_origem_id:String(prefill.solicitacao_origem_id||origem),justificativa_excecao_prazo:""}));
+      setForm((atual)=>normalizarCamposRetorno({...atual,funcionario_id:p.colaborador_id||p.funcionario_id||"",obra_id:p.obra_id||"",origem:p.origem||"",destino:p.destino||"",motivo:motivo as Motivo|"",desligamento_subtipo:motivo==="desligamento"?(p.desligamento_subtipo||"") as DesligamentoSubtipo|"":"",data_ida:p.data_ida||"",data_retorno:p.data_retorno||"",destino_retorno:p.destino_retorno||"",centro_custo_retorno_id:p.centro_custo_retorno_id||"",retorno_indefinido:Boolean(p.retorno_indefinido),centro_custo_destino_id:p.centro_custo_destino_id||"",observacoes_solicitante:p.observacoes_solicitante||"",solicitacao_origem_id:String(prefill.solicitacao_origem_id||origem),justificativa_excecao_prazo:""}));
       setDocumento(null);
       if(!motivo&&p.motivo)setErro("O motivo original não está disponível para seu perfil. Selecione outro motivo permitido.");
     });
