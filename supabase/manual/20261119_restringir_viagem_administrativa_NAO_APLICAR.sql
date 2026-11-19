@@ -1,43 +1,87 @@
--- PREPARADO PARA APLICAÇÃO SUPERVISIONADA. NÃO EXECUTAR AUTOMATICAMENTE.
--- Protege INSERT e alterações de motivo/passageiro; não altera solicitações existentes.
+-- SOMENTE PREPARAÇÃO. Revisar backup e aplicar SUPERVISIONADAMENTE após homologação.
+-- Projeto alvo: Portal TanksBR. Não aplicar por CI nem por Preview.
+-- O catálogo RO usa ro_funcionarios_enderecos_privados.id (colaborador_id).
+-- ro_funcionarios_enderecos_privados.funcionario_id é o vínculo canônico com Obras Control.
 begin;
+
+-- O backend normaliza, persiste e apresenta campos de retorno consultando esta função;
+-- alterá-la é necessário além de src/retornoRules.ts.
+create or replace function public.ro_motivo_possui_retorno(p_motivo text)
+returns boolean language sql immutable parallel safe
+set search_path=public,pg_temp as $$
+  select coalesce(p_motivo in ('ferias','folga_campo','recesso','viagem_administrativa'),false);
+$$;
+
+-- Nenhuma tabela de solicitação é atualizada em massa: o gatilho aplica-se
+-- apenas a novas solicitações e mudanças relevantes de identidade, motivo ou datas.
 create or replace function public.ro_validar_passageiro_viagem_administrativa()
-returns trigger language plpgsql security definer set search_path = '' as $$
-declare v_elegivel boolean := false;
+returns trigger language plpgsql security definer
+set search_path = '' as $$
+declare
+  v_ativo boolean;
+  v_vinculo_operacional boolean;
+  v_funcionario_vinculado uuid;
 begin
   if new.motivo is distinct from 'viagem_administrativa' then return new; end if;
-  -- Registros históricos não são revalidados em atualizações operacionais sem alteração de identidade/motivo.
-  if tg_op = 'UPDATE' and new.motivo is not distinct from old.motivo
-     and new.funcionario_id is not distinct from old.funcionario_id
-     and new.colaborador_id is not distinct from old.colaborador_id
-     and new.viajante_nome_informado is not distinct from old.viajante_nome_informado then
-    return new;
-  end if;
-  if new.viajante_nome_informado is not null then
+
+  -- Operações RO de status, compras e aprovações não revalidam dados históricos.
+  if tg_op = 'UPDATE'
+    and new.motivo is not distinct from old.motivo
+    and new.funcionario_id is not distinct from old.funcionario_id
+    and new.colaborador_id is not distinct from old.colaborador_id
+    and new.viajante_nome_informado is not distinct from old.viajante_nome_informado
+    and new.data_ida is not distinct from old.data_ida
+    and new.data_retorno is not distinct from old.data_retorno
+    and new.destino_retorno is not distinct from old.destino_retorno
+    and new.centro_custo_retorno_id is not distinct from old.centro_custo_retorno_id
+    and new.retorno_indefinido is not distinct from old.retorno_indefinido
+  then return new; end if;
+
+  -- Sem nome avulso nem apenas funcionario_id. O passageiro deve constar
+  -- no cadastro privado RO e possuir vínculo não operacional ou nenhum vínculo.
+  if new.colaborador_id is null or new.viajante_nome_informado is not null then
     raise exception 'VIAGEM_ADMINISTRATIVA_PASSAGEIRO_INELEGIVEL';
   end if;
-  if new.colaborador_id is not null then
-    select e.ativo and (f.id is null or (
-      coalesce(f.visivel_passagens,false) and not coalesce(f.visivel_obras_control,true)
-      and f.escopo_passagens='restrito_ro')) into v_elegivel
-    from public.ro_funcionarios_enderecos_privados e
-    left join public.funcionarios f on f.id=e.funcionario_id
-    where e.id=new.colaborador_id;
-  elsif new.funcionario_id is not null then
-    select f.ativo and f.deleted_at is null and f.visivel_passagens
-      and not f.visivel_obras_control and f.escopo_passagens='restrito_ro'
-      into v_elegivel from public.funcionarios f where f.id=new.funcionario_id;
-  end if;
-  if not coalesce(v_elegivel,false) then
+  select e.ativo, e.funcionario_id
+  into v_ativo, v_funcionario_vinculado
+  from public.ro_funcionarios_enderecos_privados e
+  where e.id=new.colaborador_id;
+  if not coalesce(v_ativo,false) then
     raise exception 'VIAGEM_ADMINISTRATIVA_PASSAGEIRO_INELEGIVEL';
+  end if;
+  if new.funcionario_id is distinct from v_funcionario_vinculado then
+    raise exception 'VIAGEM_ADMINISTRATIVA_VINCULO_DIVERGENTE';
+  end if;
+
+  -- O vínculo só é permitido quando não pertence ao cadastro operacional.
+  if v_funcionario_vinculado is not null then
+    select coalesce(f.visivel_obras_control,true)
+    into v_vinculo_operacional
+    from public.funcionarios f where f.id=v_funcionario_vinculado;
+    if coalesce(v_vinculo_operacional,true) then
+      raise exception 'VIAGEM_ADMINISTRATIVA_PASSAGEIRO_INELEGIVEL';
+    end if;
+  end if;
+
+  if new.data_retorno is not null and new.data_retorno < new.data_ida then
+    raise exception 'RETORNO_ANTERIOR_A_IDA';
+  end if;
+  if new.data_retorno is null and
+     (new.destino_retorno is not null or new.centro_custo_retorno_id is not null) then
+    raise exception 'DATA_RETORNO_OBRIGATORIA_PARA_TRECHO_RETORNO';
   end if;
   return new;
 end;
 $$;
-revoke all on function public.ro_validar_passageiro_viagem_administrativa() from public,anon,authenticated;
-drop trigger if exists ro_validar_passageiro_viagem_administrativa on public.ro_passagem_solicitacoes;
+
+revoke all on function public.ro_validar_passageiro_viagem_administrativa()
+from public,anon,authenticated;
+drop trigger if exists ro_validar_passageiro_viagem_administrativa
+on public.ro_passagem_solicitacoes;
 create trigger ro_validar_passageiro_viagem_administrativa
-before insert or update of motivo,funcionario_id,colaborador_id,viajante_nome_informado
+before insert or update of motivo,funcionario_id,colaborador_id,viajante_nome_informado,
+data_ida,data_retorno,destino_retorno,centro_custo_retorno_id,retorno_indefinido
 on public.ro_passagem_solicitacoes for each row
 execute function public.ro_validar_passageiro_viagem_administrativa();
+
 commit;
