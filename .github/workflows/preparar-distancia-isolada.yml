@@ -100,17 +100,34 @@ jobs:
           values.VITE_SUPABASE_PUBLISHABLE_KEY = expectedKey;
           values.VITE_FOLGA_CAMPO_KM_ENABLED = 'C2_PRODUCAO_APROVADA';
           if (values.VITE_SUPABASE_URL !== url.origin || values.VITE_SUPABASE_PROJECT_ID !== 'hukhwirdrpylxpaedjbc' || values.VITE_SUPABASE_PUBLISHABLE_KEY !== expectedKey || values.VITE_FOLGA_CAMPO_KM_ENABLED !== 'C2_PRODUCAO_APROVADA') throw Error('Build identity validation failed');
-          const output = Object.entries(values).map(([key,value]) => key + '=' + JSON.stringify(value)).join('\\n') + '\\n';
+          const output = Object.entries(values).map(([key,value]) => key + '=' + JSON.stringify(value)).join('\n') + '\n';
           fs.writeFileSync(envFile, output, {mode:0o600});
           console.log('Production build env prepared with approved public identifiers, validated publishable key and C2 gate value; values redacted.');
           NODE
       - name: Build approved source with production VITE variables
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VITE_SUPABASE_URL: https://hukhwirdrpylxpaedjbc.supabase.co
+          VITE_SUPABASE_PROJECT_ID: hukhwirdrpylxpaedjbc
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY_C2 }}
+          VITE_FOLGA_CAMPO_KM_ENABLED: C2_PRODUCAO_APROVADA
         shell: bash
         run: |
           set -euo pipefail
           vercel build --prod --scope tanks --token "$VERCEL_TOKEN"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const root='.vercel/output/static';
+          const files=[];
+          function walk(p) { for (const item of fs.readdirSync(p,{withFileTypes:true})) { const full=path.join(p,item.name); if(item.isDirectory())walk(full); else if(item.name.endsWith('.js'))files.push(full); } }
+          walk(root);
+          const js=files.map(p=>fs.readFileSync(p,'utf8')).join('\n');
+          const url=process.env.VITE_SUPABASE_URL;
+          const key=process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+          if(!key || !key.startsWith('sb_publishable_') || !js.includes(url) || !js.includes(key) || js.includes('https://placeholder.supabase.co')) throw Error('Compiled JS missing approved Supabase config or contains placeholder');
+          console.log('Compiled JS contains approved Supabase URL and public key; placeholder absent (values redacted).');
+          NODE
       - name: Stage production deployment without aliases
         id: deploy
         env:
