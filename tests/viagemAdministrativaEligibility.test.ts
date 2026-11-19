@@ -9,6 +9,7 @@ const obras = { id: "operacional-1", funcionario_id: "operacional-1", nome: "Té
 
 test("somente cadastro privado RO sem vínculo operacional pode ser selecionado", () => {
   assert.equal(passageiroElegivelViagemAdministrativa(interno), true);
+  assert.equal(passageiroElegivelViagemAdministrativa({ ...interno, visivel_passagens: undefined, escopo_passagens: undefined }), true, "a origem privada prevalece sobre flags auxiliares");
   assert.equal(passageiroElegivelViagemAdministrativa(obras), false);
   assert.equal(passageiroElegivelViagemAdministrativa({ ...obras, visivel_obras_control: false, escopo_passagens: "restrito_ro" }), false, "registro em funcionarios continua não elegível");
   assert.equal(passageiroElegivelViagemAdministrativa({ ...interno, funcionario_id: "operacional-1", visivel_obras_control: true }), false);
