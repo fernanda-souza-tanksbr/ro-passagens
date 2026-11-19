@@ -108,6 +108,6 @@ AS $function$
     and e.funcionario_id is null
 
   order by 2;
-$function$
+$function$;
 
 commit;
