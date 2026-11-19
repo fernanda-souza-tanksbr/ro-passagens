@@ -1,6 +1,6 @@
 import type { Motivo } from "./types";
 
-export const MOTIVOS_COM_RETORNO = ["ferias", "folga_campo", "recesso"] as const;
+export const MOTIVOS_COM_RETORNO = ["ferias", "folga_campo", "recesso", "viagem_administrativa"] as const;
 
 export function motivoPossuiRetorno(motivo: Motivo | "" | null | undefined): boolean {
   return MOTIVOS_COM_RETORNO.some((item) => item === motivo);
@@ -21,4 +21,20 @@ export function normalizarCamposRetorno<T extends CamposRetorno>(form: T): T {
     return { ...form, destino_retorno: "", centro_custo_retorno_id: "" };
   }
   return form;
+}
+
+/** Validação específica do retorno administrativo, sem mudar os demais motivos. */
+export function erroRetornoAdministrativo(
+  motivo: Motivo | "",
+  dataIda: string,
+  dataRetorno: string,
+  destinoRetorno: string,
+  centroCustoRetornoId: string,
+): string | null {
+  if (motivo !== "viagem_administrativa") return null;
+  if (dataRetorno && dataRetorno < dataIda) return "A data de retorno não pode ser anterior à data de ida.";
+  if (!dataRetorno && (destinoRetorno.trim() || centroCustoRetornoId)) {
+    return "Informe a data de retorno ou limpe destino e centro de custo de retorno.";
+  }
+  return null;
 }

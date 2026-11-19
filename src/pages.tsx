@@ -48,15 +48,16 @@ import { invalidateAccess } from "./accessCache";
 import { getCatalogCacheUser, invalidateCatalogs, loadCatalogs, subscribeCatalogInvalidation } from "./catalogCache";
 import { subscribeVisible } from "./visibilityRevalidation";
 import { isRateLimitError, PASSWORD_MIN_LENGTH, PASSWORD_RECOVERY_MESSAGE, PASSWORD_RECOVERY_REDIRECT } from "./auth";
-import { calcularDataMinima, canExcepcionarPrazo, categoriaDocumento, dataMinimaDoInput, limparDataIdaInvalida, mensagemAntecedencia, motivoAoSelecionarFuncionario, motivoPermiteExcecaoPrazo, motivosPermitidos, regraPrazo } from "./passagemRules";
+import { calcularDataMinima, canExcepcionarPrazo, categoriaDocumento, dataMinimaDoInput, limparDataIdaInvalida, mensagemAntecedencia, motivoPermiteExcecaoPrazo, motivosPermitidos, regraPrazo } from "./passagemRules";
 import { motivoPrefillPermitido, motivoRecusaValido, podeRecusarSolicitacao, statusContaComoAberto } from "./recusaRules";
 import { operationalRejectionErrorDetails, operationalRejectionErrorMessage } from "./recusaErrorMessages";
 import { compraFolgaLiberada, dataAntecipaCiclo, estadoEfetivoFolga, folgaFuturaBloqueia, justificativaAntecipacaoValida, SEM_HISTORICO_FOLGA, type CicloFolga } from "./folgaCampoRules";
-import { motivoPossuiRetorno, normalizarCamposRetorno } from "./retornoRules";
+import { erroRetornoAdministrativo, motivoPossuiRetorno, normalizarCamposRetorno } from "./retornoRules";
+import { motivoAdministrativoPermitido, passageiroElegivelViagemAdministrativa } from "./viagemAdministrativaEligibility";
 import { formatCityUf, normalizeNeighborhoodForDisplay, normalizeStreetForDisplay, parseCityUf } from "./collaboratorDisplay";
 import { currentCostCenterPrefill } from "./collaboratorCostCenter";
 import { idsSolicitacoesParaResolver, mapearNomesColaboradoresSolicitacoes, resolveSolicitacaoFuncionarioNome, solicitacaoCorrespondeBuscaPessoa } from "./solicitacaoColaborador";
-import { resumoStatusSolicitacao, solicitacaoStatusOptions, statusPertenceAoFiltro, todosStatusSolicitacao } from "./solicitacoesFilters";
+import { resumoStatusSolicitacao, solicitacaoStatusOptions, statusPertenceAoFiltro, todosStatusSolicitacao, responsavelRoCorrespondeFiltro } from "./solicitacoesFilters";
 import { attachStatusFilterDismissal } from "./statusFilterDismissal";
 import { normalizeSolicitacoesFilters, readSolicitacoesFilters, writeSolicitacoesFilters, type SolicitacoesFilters } from "./solicitacoesFilterPersistence";
 import { CostCenterCombobox } from "./CostCenterCombobox";
@@ -756,6 +757,7 @@ export function Solicitacoes({
   const [rows, setRows] = useState<Solicitacao[]>([]);
   const [userLabels, setUserLabels] = useState<Record<string, string>>({});
   const [nomesFuncionarios, setNomesFuncionarios] = useState<Record<string, string>>({});
+  const [operadoresRo, setOperadoresRo] = useState<Array<{ user_id: string; ativo: boolean; nome: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [approvalView, setApprovalView] = useState<"pending" | "history">("pending");
   const filtersChanged = useRef(false);
@@ -801,19 +803,20 @@ export function Solicitacoes({
         : Promise.resolve({ data: [] }),
       carregarNomesColaboradoresSolicitacoes(loaded),
     ]);
-    setUserLabels(
-      Object.fromEntries(
-        (labels || []).map((item: { id: string; label: string }) => [
-          item.id,
-          item.label,
-        ]),
-      ),
-    );
+    setUserLabels((current) => ({ ...current, ...Object.fromEntries((labels || []).map((item: { id: string; label: string }) => [item.id, item.label])) }));
     setNomesFuncionarios(nomesCarregados);
     setRows(loaded);
     setLoading(false);
   }, [approvalView, approvalsOnly, mostrandoExcluidas, userId]);
   useAutoFinalization(access.canViewAll, load);
+  useEffect(() => {
+    if (!access.canViewAll) return;
+    // O SELECT direto de ro_responsaveis aplica RLS (operador vê apenas o próprio ID).
+    // RPC de leitura retorna o catálogo autorizado completo e os nomes reais.
+    supabase.rpc("ro_listar_responsaveis_filtro").then(({ data }) => {
+      setOperadoresRo((data || []) as Array<{ user_id: string; ativo: boolean; nome: string }>);
+    });
+  }, [access.canViewAll]);
   useEffect(() => {
     load();
   }, [load]);
@@ -852,6 +855,7 @@ export function Solicitacoes({
       (!filters.motivo || r.motivo === filters.motivo) &&
       matchesApprovalFilter(r.aprovacao_status, filters.aprovacao) &&
       (!filters.obra || r.obra_id === filters.obra) &&
+      responsavelRoCorrespondeFiltro(responsavelId(r), filters.responsavelRo, userId, access.canViewAll) &&
       (!filters.busca ||
         solicitacaoCorrespondeBuscaPessoa(r, filters.busca, nomesFuncionarios[r.id]) ||
         centroCustoMatches(r.obra || { nome: "" }, filters.busca) ||
@@ -934,6 +938,12 @@ export function Solicitacoes({
           <option value="aprovada">Aprovadas</option>
           <option value="reprovada">Reprovadas</option>
           <option value="dispensada">Dispensadas</option>
+        </select>}
+        {access.canViewAll && !approvalsOnly && <select aria-label="Responsável RO" value={filters.responsavelRo} onChange={(e) => updateFilters({ ...filters, responsavelRo: e.target.value })}>
+          <option value="">Todos os responsáveis</option>
+          <option value="minhas">Minhas solicitações</option>
+          <option value="sem_responsavel">Sem responsável</option>
+          {operadoresRo.filter((operador) => operador.ativo || operador.user_id === filters.responsavelRo).map((operador) => <option key={operador.user_id} value={operador.user_id}>{operador.nome || userLabels[operador.user_id] || "Responsável RO"}{operador.ativo ? "" : " (inativo)"}</option>)}
         </select>}
         <select
           value={filters.obra}
@@ -1157,9 +1167,9 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
     if(!origem)return;
     supabase.rpc("ro_obter_dados_para_refazer_solicitacao",{p_solicitacao_id:origem}).then(({data:prefill,error})=>{
       if(error||!prefill){setErro("Não foi possível carregar os dados seguros da solicitação recusada.");return;}
-      const p=prefill as Partial<typeof form>;
+      const p=prefill as Partial<typeof form> & {colaborador_id?:string|null};
       const motivo=motivoPrefillPermitido(p.motivo as Motivo|null,motivosPermitidos(access.role,access.isRh));
-      setForm((atual)=>normalizarCamposRetorno({...atual,funcionario_id:p.funcionario_id||"",obra_id:p.obra_id||"",origem:p.origem||"",destino:p.destino||"",motivo:motivo as Motivo|"",desligamento_subtipo:motivo==="desligamento"?(p.desligamento_subtipo||"") as DesligamentoSubtipo|"":"",data_ida:p.data_ida||"",data_retorno:p.data_retorno||"",destino_retorno:p.destino_retorno||"",centro_custo_retorno_id:p.centro_custo_retorno_id||"",retorno_indefinido:Boolean(p.retorno_indefinido),centro_custo_destino_id:p.centro_custo_destino_id||"",observacoes_solicitante:p.observacoes_solicitante||"",solicitacao_origem_id:String(prefill.solicitacao_origem_id||origem),justificativa_excecao_prazo:""}));
+      setForm((atual)=>normalizarCamposRetorno({...atual,funcionario_id:p.colaborador_id||p.funcionario_id||"",obra_id:p.obra_id||"",origem:p.origem||"",destino:p.destino||"",motivo:motivo as Motivo|"",desligamento_subtipo:motivo==="desligamento"?(p.desligamento_subtipo||"") as DesligamentoSubtipo|"":"",data_ida:p.data_ida||"",data_retorno:p.data_retorno||"",destino_retorno:p.destino_retorno||"",centro_custo_retorno_id:p.centro_custo_retorno_id||"",retorno_indefinido:Boolean(p.retorno_indefinido),centro_custo_destino_id:p.centro_custo_destino_id||"",observacoes_solicitante:p.observacoes_solicitante||"",solicitacao_origem_id:String(prefill.solicitacao_origem_id||origem),justificativa_excecao_prazo:""}));
       setDocumento(null);
       if(!motivo&&p.motivo)setErro("O motivo original não está disponível para seu perfil. Selecione outro motivo permitido.");
     });
@@ -1236,11 +1246,14 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
       viajante_nome_informado: "",
       funcionario_id: id,
       obra_id: currentCostCenterPrefill(f),
-      motivo: motivoAoSelecionarFuncionario(f, form.motivo),
+      motivo: motivoAdministrativoPermitido(form.motivo, f)
+        ? (passageiroElegivelViagemAdministrativa(f) && !f?.funcionario_id ? "viagem_administrativa" : form.motivo)
+        : "",
       pix_viajante: "",
     });
   }
   function pickMotivo(motivo: Motivo | "") {
+    if (!motivoAdministrativoPermitido(motivo, funcionarioSelecionado)) return;
     restoredDraftRef.current = false;
     const temRetorno = motivoPossuiRetorno(motivo);
     setForm(normalizarCamposRetorno({
@@ -1309,6 +1322,7 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
       setErro("Selecione o motivo da solicitação.");
       return;
     }
+    if (!motivoAdministrativoPermitido(form.motivo, funcionarioSelecionado) || (form.motivo === "viagem_administrativa" && form.viajante_modo === "manual")) { setErro("Viagem Administrativa é exclusiva de passageiros restritos ou administrativos."); return; }
     if (form.motivo === "afastamento" && !form.observacoes_solicitante.trim()) {
       setErro("Informe a justificativa do afastamento.");
       return;
@@ -1321,6 +1335,8 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
       return;
     }
     if (form.data_retorno && form.data_retorno < form.data_ida) { setErro("A data de retorno não pode ser anterior à data de ida."); return; }
+    const erroRetorno = erroRetornoAdministrativo(form.motivo, form.data_ida, form.data_retorno, form.destino_retorno, form.centro_custo_retorno_id);
+    if (erroRetorno) { setErro(erroRetorno); return; }
     if(form.motivo==="folga_campo"&&folgaFuturaBloqueia(cicloFolga)){setErro(`Já existe uma solicitação de folga de campo para este funcionário em ${data(cicloFolga?.solicitacao_futura_data)}.`);return;}
     if(folgaAntecipada&&!justificativaAntecipacaoValida(form.folga_antecipacao_justificativa)){setErro("A justificativa da antecipação deve ter pelo menos 10 caracteres úteis.");return;}
     if (!operadorRoPodeCadastrarRetroativa && foraPrazo && podeExcepcionarPrazo && solicitarExcecao && !detailedJustificationIsValid(form.justificativa_excecao_prazo)) {
@@ -1383,7 +1399,7 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
             onChange={(e) => pickFuncionario(e.target.value)}
           >
             <option value="">Selecione</option>
-            {funcionarios.map((x) => (
+            {funcionarios.filter((x) => form.motivo !== "viagem_administrativa" || passageiroElegivelViagemAdministrativa(x)).map((x) => (
               <option value={x.id} key={x.id}>
                 {x.nome}
               </option>
@@ -1446,7 +1462,7 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
           >
             <option value="">Selecione</option>
             {Object.entries(motivoLabel)
-              .filter(([v]) => motivosPermitidos(access.role, access.isRh).includes(v as Motivo))
+              .filter(([v]) => motivosPermitidos(access.role, access.isRh).includes(v as Motivo) && (v !== "viagem_administrativa" || passageiroElegivelViagemAdministrativa(funcionarioSelecionado)))
               .map(([v, l]) => (
                 <option value={v} key={v}>
                   {l}
