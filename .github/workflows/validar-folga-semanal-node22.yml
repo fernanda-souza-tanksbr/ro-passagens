@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - feat/folga-campo-semanal-planejamento-20261118
+      - feat/folga-semanal-c2-integracao-20261119
   workflow_dispatch:
 permissions:
   contents: read
