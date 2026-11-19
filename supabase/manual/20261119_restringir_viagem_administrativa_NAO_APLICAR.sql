@@ -112,4 +112,24 @@ begin
   return v_result;
 end $;
 
+
+-- Viagem Administrativa não exige centro de custo de retorno.
+-- Preserva exatamente a notificação anterior nos demais motivos.
+create or replace function public.ro_notificar_retorno_pendente()
+returns trigger language plpgsql security definer set search_path=public,pg_temp as $
+declare v_nome text; v_limite date; v_ro record; v_msg text;
+begin
+  if new.motivo = 'viagem_administrativa' then return new; end if;
+  if public.ro_motivo_possui_retorno(new.motivo) and new.data_retorno is not null and (new.centro_custo_retorno_id is null or new.retorno_indefinido) then
+    select nome into v_nome from public.funcionarios where id=new.funcionario_id;
+    v_limite:=new.data_retorno-10;
+    v_msg:=format('Solicitação de retorno pendente para %s. A solicitação deve ser definida até %s, considerando retorno previsto em %s.',v_nome,to_char(v_limite,'DD/MM/YYYY'),to_char(new.data_retorno,'DD/MM/YYYY'));
+    insert into public.ro_passagem_notificacoes(solicitacao_id,canal,destinatario_tipo,destinatario,mensagem) values(new.id,'interno','solicitante',new.solicitante_id::text,v_msg);
+    for v_ro in select user_id from public.ro_responsaveis where ativo loop
+      insert into public.ro_passagem_notificacoes(solicitacao_id,canal,destinatario_tipo,destinatario,mensagem) values(new.id,'interno','ro',v_ro.user_id::text,v_msg);
+    end loop;
+  end if;
+  return new;
+end $;
+
 commit;
