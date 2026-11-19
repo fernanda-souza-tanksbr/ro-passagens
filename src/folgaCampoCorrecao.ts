@@ -1,4 +1,4 @@
-import { regimePorDistancia } from "./folgaCampoRegimes";
+import { regimePorDistancia } from "./folgaCampoRegimes.ts";
 
 export type CorrecaoDistancia = { km: number; justificativa: string };
 export function validarCorrecaoDistancia(
