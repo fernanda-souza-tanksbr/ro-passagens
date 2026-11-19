@@ -340,6 +340,7 @@ export function Dashboard({ access }: { access: Access }) {
   const [custosMensais, setCustosMensais] = useState<DashboardMonthlyCost[]>([]);
   const [nomesFuncionarios, setNomesFuncionarios] = useState<Record<string, string>>({});
   const [operadoresRo, setOperadoresRo] = useState<Array<{ user_id: string; ativo: boolean }>>([]);
+  const [operadoresRo, setOperadoresRo] = useState<Array<{ user_id: string; ativo: boolean }>>([]);
   const [mesReferencia, setMesReferencia] = useState(
     () =>
       `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`,
@@ -1246,7 +1247,9 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
       viajante_nome_informado: "",
       funcionario_id: id,
       obra_id: currentCostCenterPrefill(f),
-      motivo: motivoAdministrativoPermitido(form.motivo, f) ? motivoAoSelecionarFuncionario(f, form.motivo) : "",
+      motivo: motivoAdministrativoPermitido(form.motivo, f)
+        ? (passageiroElegivelViagemAdministrativa(f) && !f?.funcionario_id ? "viagem_administrativa" : form.motivo)
+        : "",
       pix_viajante: "",
     });
   }
@@ -1333,6 +1336,7 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
       return;
     }
     if (form.data_retorno && form.data_retorno < form.data_ida) { setErro("A data de retorno não pode ser anterior à data de ida."); return; }
+    if (form.motivo === "viagem_administrativa" && !form.data_retorno && (form.destino_retorno.trim() || form.centro_custo_retorno_id)) { setErro("Informe a data do retorno ou limpe o destino e o centro de custo de retorno."); return; }
     if(form.motivo==="folga_campo"&&folgaFuturaBloqueia(cicloFolga)){setErro(`Já existe uma solicitação de folga de campo para este funcionário em ${data(cicloFolga?.solicitacao_futura_data)}.`);return;}
     if(folgaAntecipada&&!justificativaAntecipacaoValida(form.folga_antecipacao_justificativa)){setErro("A justificativa da antecipação deve ter pelo menos 10 caracteres úteis.");return;}
     if (!operadorRoPodeCadastrarRetroativa && foraPrazo && podeExcepcionarPrazo && solicitarExcecao && !detailedJustificationIsValid(form.justificativa_excecao_prazo)) {
@@ -1395,7 +1399,7 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
             onChange={(e) => pickFuncionario(e.target.value)}
           >
             <option value="">Selecione</option>
-            {funcionarios.map((x) => (
+            {funcionarios.filter((x) => form.motivo !== "viagem_administrativa" || passageiroElegivelViagemAdministrativa(x)).map((x) => (
               <option value={x.id} key={x.id}>
                 {x.nome}
               </option>
