@@ -1,0 +1,57 @@
+name: Confidentialidade desligamentos - isolated
+on:
+  push:
+    branches: [security/desligamento-confidencialidade]
+    paths:
+      - '.github/workflows/desligamento-security.yml'
+      - 'security/**'
+      - 'src/**'
+      - 'tests/**'
+      - 'package*.json'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: local-fixture-only
+          POSTGRES_DB: security_fixture
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d security_fixture"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: local-fixture-only
+      PGDATABASE: security_fixture
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Node tests
+        run: npm test
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Build
+        run: npm run build
+      - name: PostgreSQL isolated authorization fixture
+        run: |
+          psql -v ON_ERROR_STOP=1 -f security/tests/isolated-authorization.sql
+      - name: Scope warning
+        run: |
+          echo 'PostgreSQL fixture only: does not prove production RPC, Supabase Auth, Storage API, PostgREST or React integration.'
