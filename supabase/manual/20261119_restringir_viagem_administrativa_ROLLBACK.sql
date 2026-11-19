@@ -23,4 +23,27 @@ returns boolean language sql immutable parallel safe
 set search_path=public,pg_temp as $$
   select coalesce(p_motivo in ('ferias','folga_campo','recesso'),false);
 $$;
+
+-- Restaura exatamente o contrato anterior do prefill (sem colaborador_id).
+create or replace function public.ro_obter_dados_para_refazer_solicitacao(p_solicitacao_id uuid)
+returns jsonb language plpgsql stable security definer
+set search_path=public,pg_temp as $
+declare v_result jsonb;
+begin
+  if auth.uid() is null then raise exception 'NAO_AUTENTICADO'; end if;
+  select jsonb_build_object(
+    'solicitacao_origem_id',s.id,'funcionario_id',s.funcionario_id,'obra_id',s.obra_id,
+    'origem',s.origem,'destino',s.destino,'motivo',s.motivo,'desligamento_subtipo',s.desligamento_subtipo,
+    'data_ida',s.data_ida,
+    'data_retorno',case when public.ro_motivo_possui_retorno(s.motivo) then s.data_retorno end,
+    'destino_retorno',case when public.ro_motivo_possui_retorno(s.motivo) and not s.retorno_indefinido then s.destino_retorno end,
+    'centro_custo_retorno_id',case when public.ro_motivo_possui_retorno(s.motivo) and not s.retorno_indefinido then s.centro_custo_retorno_id end,
+    'retorno_indefinido',case when public.ro_motivo_possui_retorno(s.motivo) then s.retorno_indefinido else false end,
+    'centro_custo_destino_id',s.centro_custo_destino_id,'observacoes_solicitante',s.observacoes_solicitante)
+  into v_result from public.ro_passagem_solicitacoes s
+  where s.id=p_solicitacao_id and s.solicitante_id=auth.uid() and s.status='recusada';
+  if v_result is null then raise exception 'PREFILL_NAO_AUTORIZADO'; end if;
+  return v_result;
+end $;
+
 commit;
