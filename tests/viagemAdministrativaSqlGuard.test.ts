@@ -52,3 +52,12 @@ test("catálogo privado expõe vínculo não operacional, rollback restaura sele
   assert.match(rollback,/and e\.funcionario_id is null/i);
   assert.match(sql,/new\.funcionario_id is distinct from v_funcionario_vinculado/i);
 });
+
+test("filtro RO utiliza RPC restrita em vez de SELECT sujeito a RLS",()=>{
+  assert.match(sql,/function public\.ro_listar_responsaveis_filtro\(\)/i);
+  assert.match(sql,/ro_is_operador_ativo\(auth\.uid\(\)\) or public\.ro_is_admin\(auth\.uid\(\)\)/i);
+  assert.match(sql,/left join public\.users_profiles up/i);
+  assert.match(rollback,/drop function if exists public\.ro_listar_responsaveis_filtro\(\)/i);
+  assert.match(page,/supabase\.rpc\("ro_listar_responsaveis_filtro"\)/);
+  assert.doesNotMatch(page,/supabase\.from\("ro_responsaveis"\)\.select\("user_id,ativo"\)/);
+});
