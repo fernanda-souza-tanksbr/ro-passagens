@@ -52,7 +52,7 @@ import { calcularDataMinima, canExcepcionarPrazo, categoriaDocumento, dataMinima
 import { motivoPrefillPermitido, motivoRecusaValido, podeRecusarSolicitacao, statusContaComoAberto } from "./recusaRules";
 import { operationalRejectionErrorDetails, operationalRejectionErrorMessage } from "./recusaErrorMessages";
 import { compraFolgaLiberada, dataAntecipaCiclo, estadoEfetivoFolga, folgaFuturaBloqueia, justificativaAntecipacaoValida, SEM_HISTORICO_FOLGA, type CicloFolga } from "./folgaCampoRules";
-import { motivoPossuiRetorno, normalizarCamposRetorno } from "./retornoRules";
+import { erroRetornoAdministrativo, motivoPossuiRetorno, normalizarCamposRetorno } from "./retornoRules";
 import { motivoAdministrativoPermitido, passageiroElegivelViagemAdministrativa } from "./viagemAdministrativaEligibility";
 import { formatCityUf, normalizeNeighborhoodForDisplay, normalizeStreetForDisplay, parseCityUf } from "./collaboratorDisplay";
 import { currentCostCenterPrefill } from "./collaboratorCostCenter";
@@ -1336,7 +1336,8 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
       return;
     }
     if (form.data_retorno && form.data_retorno < form.data_ida) { setErro("A data de retorno não pode ser anterior à data de ida."); return; }
-    if (form.motivo === "viagem_administrativa" && !form.data_retorno && (form.destino_retorno.trim() || form.centro_custo_retorno_id)) { setErro("Informe a data do retorno ou limpe o destino e o centro de custo de retorno."); return; }
+    const erroRetorno = erroRetornoAdministrativo(form.motivo, form.data_ida, form.data_retorno, form.destino_retorno, form.centro_custo_retorno_id);
+    if (erroRetorno) { setErro(erroRetorno); return; }
     if(form.motivo==="folga_campo"&&folgaFuturaBloqueia(cicloFolga)){setErro(`Já existe uma solicitação de folga de campo para este funcionário em ${data(cicloFolga?.solicitacao_futura_data)}.`);return;}
     if(folgaAntecipada&&!justificativaAntecipacaoValida(form.folga_antecipacao_justificativa)){setErro("A justificativa da antecipação deve ter pelo menos 10 caracteres úteis.");return;}
     if (!operadorRoPodeCadastrarRetroativa && foraPrazo && podeExcepcionarPrazo && solicitarExcecao && !detailedJustificationIsValid(form.justificativa_excecao_prazo)) {
