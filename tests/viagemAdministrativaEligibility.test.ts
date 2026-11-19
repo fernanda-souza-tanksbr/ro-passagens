@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { passageiroElegivelViagemAdministrativa, motivoAdministrativoPermitido } from "../src/viagemAdministrativaEligibility.ts";
-import { motivoPossuiRetorno, normalizarCamposRetorno } from "../src/retornoRules.ts";
+import { erroRetornoAdministrativo, motivoPossuiRetorno, normalizarCamposRetorno } from "../src/retornoRules.ts";
 import type { Funcionario } from "../src/types.ts";
 
 const interno = { id: "privado-1", funcionario_id: null, nome: "Colaborador administrativo", visivel_obras_control: false, visivel_passagens: true, escopo_passagens: "restrito_ro" } satisfies Funcionario;
@@ -31,4 +31,13 @@ test("retorno da Viagem Administrativa é opcional sem introduzir campos obrigat
 test("motivos existentes permanecem intactos", () => {
   for (const motivo of ["ferias", "folga_campo", "recesso"] as const) assert.equal(motivoPossuiRetorno(motivo), true);
   assert.equal(motivoPossuiRetorno("desligamento"), false);
+});
+
+test("retorno anterior à ida e trecho sem data são rejeitados", () => {
+  assert.equal(erroRetornoAdministrativo("viagem_administrativa", "2026-12-12", "2026-12-11", "", ""), "A data de retorno não pode ser anterior à data de ida.");
+  assert.match(erroRetornoAdministrativo("viagem_administrativa", "2026-12-12", "", "São Paulo / SP", "") || "", /data de retorno/);
+  assert.match(erroRetornoAdministrativo("viagem_administrativa", "2026-12-12", "", "", "obra") || "", /data de retorno/);
+  assert.equal(erroRetornoAdministrativo("viagem_administrativa", "2026-12-12", "", "", ""), null);
+  assert.equal(erroRetornoAdministrativo("viagem_administrativa", "2026-12-12", "2026-12-12", "São Paulo / SP", "obra"), null);
+  assert.equal(erroRetornoAdministrativo("ferias", "2026-12-12", "", "Recife", ""), null);
 });
