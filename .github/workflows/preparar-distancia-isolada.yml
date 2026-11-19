@@ -56,7 +56,7 @@ jobs:
           # Install a pinned .env parser outside the checked-out repository.
           npm install --prefix /tmp/folga-dotenv --ignore-scripts --no-audit --no-fund --silent dotenv@16.4.5
           # Validate the public key against the approved Supabase Auth endpoint without logging its value.
-          status="$(curl --silent --output /dev/null --write-out '%{http_code}' --header "apikey: $APPROVED_PUBLISHABLE_KEY" --header "Authorization: Bearer $APPROVED_PUBLISHABLE_KEY" 'https://hukhwirdrpylxpaedjbc.supabase.co/auth/v1/settings')"
+          status="$(curl --silent --output /dev/null --write-out '%{http_code}' --header "apikey: $APPROVED_PUBLISHABLE_KEY" 'https://hukhwirdrpylxpaedjbc.supabase.co/auth/v1/settings')"
           if [ "$status" != 200 ]; then echo "::error::Approved publishable key was not accepted by the expected Supabase Auth endpoint (HTTP $status)"; exit 1; fi
           echo "Approved publishable key accepted by expected Supabase project."
           node --input-type=module <<'NODE'
@@ -80,6 +80,8 @@ jobs:
             return key + ': ' + (v === undefined ? 'absent' : !v || /^\\[SENSITIVE\\]$/i.test(v) ? 'empty or protected' : 'provided');
           });
           exported.forEach(line => console.log('Vercel export ' + line));
+          const unsafe = Object.keys(values).filter(k => /^VITE_/.test(k) && /(SERVICE_ROLE|SECRET|PRIVATE|JWT_SECRET)/i.test(k));
+          if (unsafe.length) throw Error('Unsafe VITE-prefixed variable names found; refusing frontend build');
           values.VITE_SUPABASE_URL = url.origin;
           values.VITE_SUPABASE_PROJECT_ID = 'hukhwirdrpylxpaedjbc';
           values.VITE_SUPABASE_PUBLISHABLE_KEY = expectedKey;
