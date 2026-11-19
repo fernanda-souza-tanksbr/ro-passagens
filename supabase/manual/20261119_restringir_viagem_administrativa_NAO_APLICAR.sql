@@ -132,4 +132,53 @@ begin
   return new;
 end $$;
 
+-- Cadastro importado RO: preservar IDs privados e marcar vínculos não-operacionais.
+CREATE OR REPLACE FUNCTION public.ro_catalogo_colaboradores_viagem()
+ RETURNS TABLE(id uuid, nome text, funcionario_id uuid, ativo boolean, visivel_obras_control boolean, visivel_passagens boolean, escopo_passagens text, obra_id uuid, obra_nome text)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select f.id,
+         f.nome,
+         f.id,
+         true,
+         f.visivel_obras_control,
+         f.visivel_passagens,
+         f.escopo_passagens,
+         atual.obra_id,
+         o.nome
+  from public.funcionarios f
+  left join lateral(
+    select a.obra_id
+    from public.alocacoes a
+    where a.funcionario_id=f.id
+    order by a.data desc
+    limit 1
+  ) atual on f.visivel_obras_control
+  left join public.obras o on o.id=atual.obra_id
+  where public.ro_funcionario_disponivel_para_usuario(auth.uid(),f.id)
+
+  union all
+
+  select e.id,
+         e.nome,
+         e.funcionario_id,
+         true,
+         false,
+         true,
+         'restrito_ro'::text,
+         null::uuid,
+         null::text
+  from public.ro_funcionarios_enderecos_privados e
+  where auth.uid() is not null
+    and e.ativo
+    and (e.funcionario_id is null or exists (
+      select 1 from public.funcionarios f
+      where f.id=e.funcionario_id and f.visivel_obras_control = false
+    ))
+
+  order by 2;
+$function$
+
 commit;
