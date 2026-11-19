@@ -23,7 +23,7 @@ insert into auth.users(id,email) values
 ('10000000-0000-0000-0000-000000000001','admin@example.invalid'),
 ('10000000-0000-0000-0000-000000000002','ro@example.invalid'),
 ('10000000-0000-0000-0000-000000000003','outside@example.invalid'),
-('10000000-0000-0000-0000-000000000004','inactive@example.invalid');
+('10000000-0000-0000-0000-000000000004','inactive@example.invalid') on conflict(id) do nothing;
 insert into public.users_profiles(id,full_name) values
 ('10000000-0000-0000-0000-000000000001','Gestor ficticio'),
 ('10000000-0000-0000-0000-000000000002','Operador ficticio'),
@@ -35,7 +35,7 @@ insert into public.ro_responsaveis(user_id,ativo) values
 insert into public.obras(id,nome) values('20000000-0000-0000-0000-000000000001','Obra ficticia');
 insert into public.funcionarios(id,nome,visivel_obras_control,escopo_passagens) values
 ('30000000-0000-0000-0000-000000000001','Funcionario operacional',true,'comum'),
-('30000000-0000-0000-0000-000000000002','Funcionario nao operacional',false,'restrito_ro');
+('30000000-0000-0000-0000-000000000002','Funcionario nao operacional',false,'restrito_ro') on conflict(id) do nothing;
 insert into public.ro_funcionarios_enderecos_privados(id,nome,funcionario_id) values
 ('40000000-0000-0000-0000-000000000001','Importado sem vinculo',null),
 ('40000000-0000-0000-0000-000000000002','Importado nao operacional','30000000-0000-0000-0000-000000000002'),
