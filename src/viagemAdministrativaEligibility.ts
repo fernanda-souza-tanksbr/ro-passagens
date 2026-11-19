@@ -11,8 +11,8 @@ export function passageiroElegivelViagemAdministrativa(funcionario: Funcionario 
   if (!funcionario) return false;
   const cadastroPrivado = funcionario.funcionario_id !== funcionario.id;
   const semVinculoOperacional = funcionario.visivel_obras_control === false;
-  return cadastroPrivado && semVinculoOperacional &&
-    funcionario.visivel_passagens === true && funcionario.escopo_passagens === "restrito_ro";
+  // O catálogo RO é a fonte canônica: não excluir importados por flags de escopo/visibilidade.
+  return cadastroPrivado && semVinculoOperacional;
 }
 
 export function motivoAdministrativoPermitido(motivo: string, funcionario: Funcionario | null | undefined): boolean {
