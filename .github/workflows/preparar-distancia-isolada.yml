@@ -46,6 +46,7 @@ jobs:
       - name: Link to existing Tanks project and pull production settings
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          APPROVED_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY_C2 }}
         shell: bash
         run: |
           set -euo pipefail
@@ -54,6 +55,10 @@ jobs:
           vercel pull --yes --environment=production --scope tanks --token "$VERCEL_TOKEN"
           # Install a pinned .env parser outside the checked-out repository.
           npm install --prefix /tmp/folga-dotenv --ignore-scripts --no-audit --no-fund --silent dotenv@16.4.5
+          # Validate the public key against the approved Supabase Auth endpoint without logging its value.
+          status="$(curl --silent --output /dev/null --write-out '%{http_code}' --header "apikey: $APPROVED_PUBLISHABLE_KEY" --header "Authorization: Bearer $APPROVED_PUBLISHABLE_KEY" 'https://hukhwirdrpylxpaedjbc.supabase.co/auth/v1/settings')"
+          if [ "$status" != 200 ]; then echo "::error::Approved publishable key was not accepted by the expected Supabase Auth endpoint (HTTP $status)"; exit 1; fi
+          echo "Approved publishable key accepted by expected Supabase project."
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
           import dotenv from '/tmp/folga-dotenv/node_modules/dotenv/lib/main.js';
@@ -64,42 +69,25 @@ jobs:
             throw Error('Vercel team/project identity mismatch');
           }
           console.log('Vercel team/project identity: matching');
-          const values = dotenv.parse(fs.readFileSync('.vercel/.env.production.local'));
-          let failed = false;
-          function fail(reason) { console.error('::error::' + reason); failed = true; }
-          const urlRaw = values.VITE_SUPABASE_URL;
-          console.log('VITE_SUPABASE_URL: ' + (urlRaw === undefined ? 'absent' : 'present'));
-          if (urlRaw === undefined || urlRaw.length === 0) {
-            fail('VITE_SUPABASE_URL absent or empty');
-          } else {
-            const candidate = urlRaw.trim();
-            let parsed;
-            try { parsed = new URL(candidate); } catch { fail('VITE_SUPABASE_URL invalid URL syntax after dotenv parsing'); }
-            if (parsed) {
-              const valid = parsed.protocol === 'https:' && parsed.username === '' && parsed.password === '' && parsed.search === '' && parsed.hash === '' && parsed.pathname === '/' && parsed.port === '';
-              console.log('VITE_SUPABASE_URL format: ' + (valid ? 'valid HTTPS origin' : 'invalid HTTPS origin format'));
-              if (!valid) fail('VITE_SUPABASE_URL has an unexpected scheme, port, credentials, path, query or fragment');
-              const normalized = parsed.origin;
-              const matches = valid && normalized === expectedUrl;
-              console.log('VITE_SUPABASE_URL project: ' + (matches ? 'matching' : 'divergent'));
-              if (!matches && valid) fail('VITE_SUPABASE_URL hostname differs from approved Supabase project');
-            }
-            if (candidate !== urlRaw) console.log('VITE_SUPABASE_URL formatting: surrounding whitespace normalized');
-          }
-          const idRaw = values.VITE_SUPABASE_PROJECT_ID;
-          console.log('VITE_SUPABASE_PROJECT_ID: ' + (idRaw === undefined ? 'absent' : 'present'));
-          const idMatches = idRaw === expectedId;
-          console.log('VITE_SUPABASE_PROJECT_ID project: ' + (idMatches ? 'matching' : 'divergent'));
-          if (!idMatches) {
-            if (idRaw === undefined || idRaw.length === 0) fail('VITE_SUPABASE_PROJECT_ID absent or empty');
-            else if (idRaw.trim() === expectedId) fail('VITE_SUPABASE_PROJECT_ID differs only by surrounding whitespace; exact match required');
-            else fail('VITE_SUPABASE_PROJECT_ID differs from approved Supabase project');
-          }
-          const hasPublicKey = Boolean(values.VITE_SUPABASE_ANON_KEY || values.VITE_SUPABASE_PUBLISHABLE_KEY);
-          console.log('Supabase public client key: ' + (hasPublicKey ? 'present' : 'absent'));
-          if (!hasPublicKey) fail('Missing public Supabase client key');
-          if (failed) process.exit(1);
-          console.log('Production Supabase identity: verified; no values disclosed');
+          const envFile = '.vercel/.env.production.local';
+          const values = dotenv.parse(fs.readFileSync(envFile));
+          const expectedKey = process.env.APPROVED_PUBLISHABLE_KEY || '';
+          if (!/^sb_publishable_[A-Za-z0-9_-]+$/.test(expectedKey) || /\\[SENSITIVE\\]/i.test(expectedKey)) throw Error('Approved publishable secret missing or invalid format');
+          const url = new URL('https://hukhwirdrpylxpaedjbc.supabase.co');
+          if (url.origin !== 'https://hukhwirdrpylxpaedjbc.supabase.co') throw Error('Approved Supabase URL mismatch');
+          const exported = ['VITE_SUPABASE_URL','VITE_SUPABASE_PROJECT_ID','VITE_SUPABASE_PUBLISHABLE_KEY'].map(key => {
+            const v = values[key];
+            return key + ': ' + (v === undefined ? 'absent' : !v || /^\\[SENSITIVE\\]$/i.test(v) ? 'empty or protected' : 'provided');
+          });
+          exported.forEach(line => console.log('Vercel export ' + line));
+          values.VITE_SUPABASE_URL = url.origin;
+          values.VITE_SUPABASE_PROJECT_ID = 'hukhwirdrpylxpaedjbc';
+          values.VITE_SUPABASE_PUBLISHABLE_KEY = expectedKey;
+          values.VITE_FOLGA_CAMPO_KM_ENABLED = 'C2_PRODUCAO_APROVADA';
+          if (values.VITE_SUPABASE_URL !== url.origin || values.VITE_SUPABASE_PROJECT_ID !== 'hukhwirdrpylxpaedjbc' || values.VITE_SUPABASE_PUBLISHABLE_KEY !== expectedKey || values.VITE_FOLGA_CAMPO_KM_ENABLED !== 'C2_PRODUCAO_APROVADA') throw Error('Build identity validation failed');
+          const output = Object.entries(values).map(([key,value]) => key + '=' + JSON.stringify(value)).join('\\n') + '\\n';
+          fs.writeFileSync(envFile, output, {mode:0o600});
+          console.log('Production build env prepared with approved public identifiers, validated publishable key and C2 gate value; values redacted.');
           NODE
       - name: Build approved source with production VITE variables
         env:
