@@ -25,4 +25,11 @@ jobs:
       - name: Verificar que a branch de preparacao nao ativa modo DISTANCIA por engano
         run: |
           test "$(node -p "require('./public/folga-campo-release.json').modo")" = legado
-          echo "Nenhum deployment criado por este workflow."
+      - name: Simular artefato DISTANCIA sem acessar producao
+        env:
+          VITE_FOLGA_CAMPO_KM_ENABLED: C2_PRODUCAO_APROVADA
+        run: |
+          node -e "const fs=require('fs'); fs.writeFileSync('public/folga-campo-release.json', JSON.stringify({modo:'distancia',versao_minima:2})+'\\n')"
+          npm run build
+          test "$(node -p "require('./dist/folga-campo-release.json').modo")" = distancia
+          echo "PASS: build DISTANCIA preparado apenas em CI, sem deployment."
