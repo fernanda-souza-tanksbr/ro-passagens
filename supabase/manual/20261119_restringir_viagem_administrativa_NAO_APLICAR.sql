@@ -181,4 +181,22 @@ AS $function$
   order by 2;
 $function$;
 
+
+-- A RLS existente em ro_responsaveis deixa cada operador ver somente
+-- a si mesmo. Esta RPC retorna o elenco completo sem alterar GRANTs de tabelas.
+create or replace function public.ro_listar_responsaveis_filtro()
+returns table(user_id uuid, ativo boolean, nome text)
+language sql stable security definer set search_path='' as $
+  select r.user_id, r.ativo,
+    coalesce(nullif(btrim(up.full_name),''), u.email::text, 'Responsável RO') as nome
+  from public.ro_responsaveis r
+  left join auth.users u on u.id=r.user_id
+  left join public.users_profiles up on up.id=r.user_id
+  where auth.uid() is not null
+    and (public.ro_is_operador_ativo(auth.uid()) or public.ro_is_admin(auth.uid()))
+  order by 3, 1;
+$;
+revoke all on function public.ro_listar_responsaveis_filtro() from public,anon;
+grant execute on function public.ro_listar_responsaveis_filtro() to authenticated;
+
 commit;
