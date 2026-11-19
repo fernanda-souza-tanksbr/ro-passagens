@@ -757,7 +757,7 @@ export function Solicitacoes({
   const [rows, setRows] = useState<Solicitacao[]>([]);
   const [userLabels, setUserLabels] = useState<Record<string, string>>({});
   const [nomesFuncionarios, setNomesFuncionarios] = useState<Record<string, string>>({});
-  const [operadoresRo, setOperadoresRo] = useState<Array<{ user_id: string; ativo: boolean }>>([]);
+  const [operadoresRo, setOperadoresRo] = useState<Array<{ user_id: string; ativo: boolean; nome: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [approvalView, setApprovalView] = useState<"pending" | "history">("pending");
   const filtersChanged = useRef(false);
@@ -811,12 +811,12 @@ export function Solicitacoes({
   useAutoFinalization(access.canViewAll, load);
   useEffect(() => {
     if (!access.canViewAll) return;
-    supabase.from("ro_responsaveis").select("user_id,ativo").then(({ data }) => setOperadoresRo((data || []) as Array<{ user_id: string; ativo: boolean }>));
+    // O SELECT direto de ro_responsaveis aplica RLS (operador vê apenas o próprio ID).
+    // RPC de leitura retorna o catálogo autorizado completo e os nomes reais.
+    supabase.rpc("ro_listar_responsaveis_filtro").then(({ data }) => {
+      setOperadoresRo((data || []) as Array<{ user_id: string; ativo: boolean; nome: string }>);
+    });
   }, [access.canViewAll]);
-  useEffect(() => {
-    if (!operadoresRo.length) return;
-    supabase.rpc("ro_user_labels", { p_user_ids: operadoresRo.map((x) => x.user_id) }).then(({ data }) => setUserLabels((current) => ({ ...current, ...Object.fromEntries((data || []).map((item: { id: string; label: string }) => [item.id, item.label])) })));
-  }, [operadoresRo]);
   useEffect(() => {
     load();
   }, [load]);
@@ -943,7 +943,7 @@ export function Solicitacoes({
           <option value="">Todos os responsáveis</option>
           <option value="minhas">Minhas solicitações</option>
           <option value="sem_responsavel">Sem responsável</option>
-          {operadoresRo.filter((operador) => operador.ativo || operador.user_id === filters.responsavelRo).map((operador) => <option key={operador.user_id} value={operador.user_id}>{userLabels[operador.user_id] || "Responsável RO"}{operador.ativo ? "" : " (inativo)"}</option>)}
+          {operadoresRo.filter((operador) => operador.ativo || operador.user_id === filters.responsavelRo).map((operador) => <option key={operador.user_id} value={operador.user_id}>{operador.nome || userLabels[operador.user_id] || "Responsável RO"}{operador.ativo ? "" : " (inativo)"}</option>)}
         </select>}
         <select
           value={filters.obra}
