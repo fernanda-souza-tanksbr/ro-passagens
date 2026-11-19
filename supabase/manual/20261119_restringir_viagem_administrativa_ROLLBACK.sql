@@ -110,4 +110,7 @@ AS $function$
   order by 2;
 $function$;
 
+-- Remove somente a RPC adicionada no PR #6, sem alterar políticas de RLS.
+drop function if exists public.ro_listar_responsaveis_filtro();
+
 commit;
