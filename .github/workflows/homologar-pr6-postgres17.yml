@@ -1,0 +1,104 @@
+# Temporary PR #6-only PG17 SQL homologation.
+# No production secrets, credentials, Supabase API, Vercel deploy, or external DB.
+# workflow_dispatch requires the file on default branch to appear in GitHub's
+# manual workflow menu; pull_request is scoped so PR #6 runs without merging it.
+name: Homologar PR6 SQL no PostgreSQL 17 isolado
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - ".github/workflows/homologar-pr6-postgres17.yml"
+      - "tests/pr6_pg17/**"
+      - "supabase/manual/20261119_restringir_viagem_administrativa_*.sql"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pg17-pr6:
+    if: >-
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.number == 6 &&
+       github.head_ref == 'feat/viagem-administrativa-retorno-e-filtro-ro') ||
+      (github.event_name == 'workflow_dispatch' &&
+       github.ref_name == 'feat/viagem-administrativa-retorno-e-filtro-ro')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: pr6_ci
+          POSTGRES_PASSWORD: synthetic_ci_only
+          POSTGRES_DB: pr6_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pr6_ci -d pr6_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: pr6_ci
+      PGPASSWORD: synthetic_ci_only
+      PGDATABASE: pr6_ci
+      PGCONNECT_TIMEOUT: "5"
+
+    steps:
+      - name: Checkout exact PR commit (without stored credentials)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Confirm isolated PostgreSQL 17 server and lack of production credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -Atqc "show server_version_num" | grep -E '^17[0-9]{4}$'
+          test -z "${SUPABASE_URL:-}"
+          test -z "${SUPABASE_SERVICE_ROLE_KEY:-}"
+          test -z "${DATABASE_URL:-}"
+          echo "ISOLATED_PG17_READY"
+
+      - name: Create versioned sanitized dependency fixture
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/pr6_pg17/fixture.sql
+
+      - name: Seed fictional historical administrative request BEFORE applying migration
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/pr6_pg17/pre_apply.sql
+
+      - name: Apply complete PR6 SQL script unchanged
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/manual/20261119_restringir_viagem_administrativa_NAO_APLICAR.sql
+
+      - name: Validate compiled functions, triggers, permissions and fictional data
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/pr6_pg17/smoke.sql
+
+      - name: Verify rollback FAILS CLOSED with existing administrative return
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$(mktemp)"
+          if psql -X -v ON_ERROR_STOP=1 -f supabase/manual/20261119_restringir_viagem_administrativa_ROLLBACK.sql > "$output" 2>&1; then
+            echo "FAIL: rollback unexpectedly succeeded while return data exists"
+            exit 1
+          fi
+          if ! grep -Fq "ROLLBACK_RETORNO_BLOQUEADO" "$output"; then
+            echo "FAIL: rollback failed for a reason other than its data-preservation guard"
+            cat "$output"
+            exit 1
+          fi
+          psql -X -v ON_ERROR_STOP=1 -Atqc "select public.ro_motivo_possui_retorno('viagem_administrativa')" | grep -qx t
+          psql -X -v ON_ERROR_STOP=1 -Atqc "select to_regprocedure('public.ro_validar_passageiro_viagem_administrativa()') is not null" | grep -qx t
+          echo "PR6_PROTECTED_ROLLBACK_REJECTED_WITHOUT_LOSING_FUNCTIONS"
+
+      - name: Remove only the new fictional return, then run complete rollback unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -c "delete from public.ro_passagem_solicitacoes where id='50000000-0000-0000-0000-000000000005'"
+          psql -X -v ON_ERROR_STOP=1 -f supabase/manual/20261119_restringir_viagem_administrativa_ROLLBACK.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/pr6_pg17/check_rollback.sql
+          echo "PR6_SQL_AND_ROLLBACK_PG17_OK"
