@@ -11,3 +11,12 @@ export function podePlanejarOutraFolgaSemanal(km: number | null | undefined): bo
   if (km === null || km === undefined || !Number.isSafeInteger(km)) return false;
   try { return regimePorDistancia(km).intervaloDias === 7; } catch { return false; }
 }
+
+/** Usa o km do contexto validado; enquanto ainda não há snapshot, aceita somente dígitos decimais. */
+export function distanciaPlanejamentoSemanal(kmSalvo: number | null | undefined, kmInformado: string): number | null {
+  if (kmSalvo !== null && kmSalvo !== undefined) return kmSalvo;
+  const texto = kmInformado.trim();
+  if (!/^\d+$/.test(texto)) return null;
+  const km = Number(texto);
+  return Number.isSafeInteger(km) ? km : null;
+}
