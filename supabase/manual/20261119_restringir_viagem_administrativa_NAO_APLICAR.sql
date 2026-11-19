@@ -91,7 +91,7 @@ execute function public.ro_validar_passageiro_viagem_administrativa();
 -- pode refazer uma solicitação recusada.
 create or replace function public.ro_obter_dados_para_refazer_solicitacao(p_solicitacao_id uuid)
 returns jsonb language plpgsql stable security definer
-set search_path=public,pg_temp as $
+set search_path=public,pg_temp as $$
 declare v_result jsonb;
 begin
   if auth.uid() is null then raise exception 'NAO_AUTENTICADO'; end if;
@@ -110,13 +110,13 @@ begin
   where s.id=p_solicitacao_id and s.solicitante_id=auth.uid() and s.status='recusada';
   if v_result is null then raise exception 'PREFILL_NAO_AUTORIZADO'; end if;
   return v_result;
-end $;
+end $$;
 
 
 -- Viagem Administrativa não exige centro de custo de retorno.
 -- Preserva exatamente a notificação anterior nos demais motivos.
 create or replace function public.ro_notificar_retorno_pendente()
-returns trigger language plpgsql security definer set search_path=public,pg_temp as $
+returns trigger language plpgsql security definer set search_path=public,pg_temp as $$
 declare v_nome text; v_limite date; v_ro record; v_msg text;
 begin
   if new.motivo = 'viagem_administrativa' then return new; end if;
@@ -130,6 +130,6 @@ begin
     end loop;
   end if;
   return new;
-end $;
+end $$;
 
 commit;
