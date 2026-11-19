@@ -52,6 +52,7 @@ jobs:
       - name: PostgreSQL isolated authorization fixture
         run: |
           psql -v ON_ERROR_STOP=1 -f security/tests/isolated-authorization.sql
+          psql -v ON_ERROR_STOP=1 -f security/tests/real-migration-authorization.sql
       - name: Scope warning
         run: |
           echo 'PostgreSQL fixture only: does not prove production RPC, Supabase Auth, Storage API, PostgREST or React integration.'
