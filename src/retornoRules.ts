@@ -1,6 +1,6 @@
 import type { Motivo } from "./types";
 
-export const MOTIVOS_COM_RETORNO = ["ferias", "folga_campo", "recesso"] as const;
+export const MOTIVOS_COM_RETORNO = ["ferias", "folga_campo", "recesso", "viagem_administrativa"] as const;
 
 export function motivoPossuiRetorno(motivo: Motivo | "" | null | undefined): boolean {
   return MOTIVOS_COM_RETORNO.some((item) => item === motivo);
