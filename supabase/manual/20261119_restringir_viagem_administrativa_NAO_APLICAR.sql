@@ -179,6 +179,6 @@ AS $function$
     ))
 
   order by 2;
-$function$
+$function$;
 
 commit;
