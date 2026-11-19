@@ -50,6 +50,7 @@ import { checarVersaoFolga, VERSAO_FORMULARIO_FOLGA } from "./folgaCampoVersao";
 import { montarChamadaCriacao } from "./folgaCampoCriacaoRpc";
 import { adicionarDiasIso, regimePorDistancia } from "./folgaCampoRegimes";
 import { FolgaCampoQuilometragem } from "./FolgaCampoQuilometragem";
+import { CorrecaoQuilometragemFolga } from "./CorrecaoQuilometragemFolga";
 import { fluxoFolgaDistanciaHabilitado } from "./folgaCampoFeatureConfig";
 import { consultarContextoFolga } from "./folgaCampoConsulta";
 import type { ContextoDistanciaServidor } from "./folgaCampoContextoServidor";
@@ -2016,6 +2017,7 @@ export function Detalhe({ access, userId }: { access: Access; userId: string }) 
       </section>
       {row.excluida_em && <section className="card rejection-summary"><h2>Solicitação excluída</h2><DT t="Excluída por" v={(row as Solicitacao & {excluida_por_nome?:string|null}).excluida_por_nome}/><DT t="Data da exclusão" v={dataHora(row.excluida_em)}/><DT t="Motivo" v={row.motivo_exclusao}/></section>}
       {row.status === "recusada" && row.aprovacao_status !== "reprovada" && <section className="card rejection-summary"><h2>Solicitação recusada</h2><DT t="Motivo" v={row.motivo_recusa} /><DT t="Recusada por" v={(row as Solicitacao & {recusada_por_nome?:string|null}).recusada_por_nome} /><DT t="Data" v={dataHora(row.recusada_em)} /></section>}
+      {NOVO_FLUXO_FOLGA_ATIVO && row.motivo === "folga_campo" && <CorrecaoQuilometragemFolga solicitacao={row} access={access} />}
       {row.status === "solicitada" && row.aprovador_id === userId && row.aprovacao_status === "pendente" && <AprovacaoIndividual row={row} onDone={load}/>}
       {row.motivo==="folga_campo"&&row.folga_antecipada&&<section className="card cycle-detail"><h2>Antecipação de folga de campo</h2><DT t="Data prevista do ciclo" v={data(row.folga_data_prevista_ciclo)}/><DT t="Data antecipada solicitada" v={data(row.data_ida)}/><DT t="Dias antecipados" v={row.folga_data_prevista_ciclo?String(Math.round((new Date(`${row.folga_data_prevista_ciclo}T12:00:00`).getTime()-new Date(`${row.data_ida}T12:00:00`).getTime())/86400000)):null}/><DT t="Justificativa" v={row.folga_antecipacao_justificativa}/><DT t="Status da análise" v={row.folga_antecipacao_status}/>{row.folga_antecipacao_status==="aprovada"&&<><DT t="Analisada por" v={(row as Solicitacao&{folga_antecipacao_analisada_por_nome?:string|null}).folga_antecipacao_analisada_por_nome}/><DT t="Analisada em" v={dataHora(row.folga_antecipacao_analisada_em)}/></>}{access.canOperateRO&&row.folga_antecipacao_status==="pendente"&&<AprovarAntecipacao row={row} onDone={load}/>}</section>}
       <section className="card detail request-data">
