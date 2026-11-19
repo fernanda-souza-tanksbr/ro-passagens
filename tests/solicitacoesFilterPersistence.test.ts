@@ -23,6 +23,7 @@ const customized = {
   motivo: "ferias" as const,
   aprovacao: "aprovada" as const,
   obra: "obra-1",
+  responsavelRo: "minhas",
 };
 
 test("usuário sem estado salvo recebe todos os defaults", () => {
@@ -45,6 +46,7 @@ test("restaura busca, Motivo, Aprovação e Obra", () => {
   assert.equal(restored.motivo, "ferias");
   assert.equal(restored.aprovacao, "aprovada");
   assert.equal(restored.obra, "obra-1");
+  assert.equal(restored.responsavelRo, "minhas");
 });
 
 test("Afastamento persiste como filtro e JSON antigo continua válido", () => {
@@ -107,4 +109,15 @@ test("integração restaura no mount, persiste com debounce e remonta na troca d
   assert.match(page, /readSolicitacoesFilters\(userId\)/);
   assert.match(page, /setTimeout\(\(\) => writeSolicitacoesFilters\(userId, filters\), 200\)/);
   assert.match(app, /<Solicitacoes key=\{session\.user\.id\}/);
+});
+
+test("responsável RO persiste por usuário e aceita opções canônicas", () => {
+  const storage = new MemoryStorage();
+  const uuid = "8bc33d75-7dea-4fca-a7bf-102952cb4c18";
+  for (const responsavelRo of ["", "minhas", "sem_responsavel", uuid]) {
+    writeSolicitacoesFilters("ro-1", { ...defaultSolicitacoesFilters(), responsavelRo }, storage);
+    assert.equal(readSolicitacoesFilters("ro-1", storage).responsavelRo, responsavelRo);
+  }
+  assert.equal(readSolicitacoesFilters("ro-2", storage).responsavelRo, "");
+  assert.equal(normalizeSolicitacoesFilters({ responsavelRo: "nome livre" }).responsavelRo, "");
 });
