@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { podePlanejarOutraFolgaSemanal } from "./folgaCampoPlanejamento";
 import Papa from "papaparse";
 import readXlsxFile, { readSheet, type SheetData } from "read-excel-file/browser";
 import {
@@ -1394,7 +1395,7 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
     if (form.data_retorno && form.data_retorno < form.data_ida) { setErro("A data de retorno não pode ser anterior à data de ida."); return; }
     if(form.motivo==="folga_campo"&&(
       NOVO_FLUXO_FOLGA_ATIVO
-        ? Boolean(contextoKmFolga?.solicitacao_futura_existente_id)
+        ? Boolean(contextoKmFolga?.solicitacao_futura_existente_id) && !podePlanejarOutraFolgaSemanal(contextoKmFolga?.distancia_km ?? (/^\\d+$/.test(kmFolgaInformado.trim()) ? Number(kmFolgaInformado.trim()) : null))
         : folgaFuturaBloqueia(cicloFolga)
     )){
       setErro(NOVO_FLUXO_FOLGA_ATIVO
