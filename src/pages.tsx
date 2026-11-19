@@ -57,7 +57,7 @@ import { motivoAdministrativoPermitido, passageiroElegivelViagemAdministrativa }
 import { formatCityUf, normalizeNeighborhoodForDisplay, normalizeStreetForDisplay, parseCityUf } from "./collaboratorDisplay";
 import { currentCostCenterPrefill } from "./collaboratorCostCenter";
 import { idsSolicitacoesParaResolver, mapearNomesColaboradoresSolicitacoes, resolveSolicitacaoFuncionarioNome, solicitacaoCorrespondeBuscaPessoa } from "./solicitacaoColaborador";
-import { resumoStatusSolicitacao, solicitacaoStatusOptions, statusPertenceAoFiltro, todosStatusSolicitacao } from "./solicitacoesFilters";
+import { resumoStatusSolicitacao, solicitacaoStatusOptions, statusPertenceAoFiltro, todosStatusSolicitacao, responsavelRoCorrespondeFiltro } from "./solicitacoesFilters";
 import { attachStatusFilterDismissal } from "./statusFilterDismissal";
 import { normalizeSolicitacoesFilters, readSolicitacoesFilters, writeSolicitacoesFilters, type SolicitacoesFilters } from "./solicitacoesFilterPersistence";
 import { CostCenterCombobox } from "./CostCenterCombobox";
@@ -812,7 +812,7 @@ export function Solicitacoes({
   useAutoFinalization(access.canViewAll, load);
   useEffect(() => {
     if (!access.canViewAll) return;
-    supabase.from("ro_responsaveis").select("user_id,ativo").eq("ativo", true).then(({ data }) => setOperadoresRo((data || []) as Array<{ user_id: string; ativo: boolean }>));
+    supabase.from("ro_responsaveis").select("user_id,ativo").then(({ data }) => setOperadoresRo((data || []) as Array<{ user_id: string; ativo: boolean }>));
   }, [access.canViewAll]);
   useEffect(() => {
     if (!operadoresRo.length) return;
@@ -856,7 +856,7 @@ export function Solicitacoes({
       (!filters.motivo || r.motivo === filters.motivo) &&
       matchesApprovalFilter(r.aprovacao_status, filters.aprovacao) &&
       (!filters.obra || r.obra_id === filters.obra) &&
-      (!access.canViewAll || !filters.responsavelRo || (filters.responsavelRo === "minhas" ? responsavelId(r) === userId : filters.responsavelRo === "sem_responsavel" ? !responsavelId(r) : responsavelId(r) === filters.responsavelRo)) &&
+      responsavelRoCorrespondeFiltro(responsavelId(r), filters.responsavelRo, userId, access.canViewAll) &&
       (!filters.busca ||
         solicitacaoCorrespondeBuscaPessoa(r, filters.busca, nomesFuncionarios[r.id]) ||
         centroCustoMatches(r.obra || { nome: "" }, filters.busca) ||
@@ -944,7 +944,7 @@ export function Solicitacoes({
           <option value="">Todos os responsáveis</option>
           <option value="minhas">Minhas solicitações</option>
           <option value="sem_responsavel">Sem responsável</option>
-          {operadoresRo.map((operador) => <option key={operador.user_id} value={operador.user_id}>{userLabels[operador.user_id] || "Responsável RO"}</option>)}
+          {operadoresRo.filter((operador) => operador.ativo || operador.user_id === filters.responsavelRo).map((operador) => <option key={operador.user_id} value={operador.user_id}>{userLabels[operador.user_id] || "Responsável RO"}{operador.ativo ? "" : " (inativo)"}</option>)}
         </select>}
         <select
           value={filters.obra}
