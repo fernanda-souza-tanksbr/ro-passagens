@@ -803,14 +803,7 @@ export function Solicitacoes({
         : Promise.resolve({ data: [] }),
       carregarNomesColaboradoresSolicitacoes(loaded),
     ]);
-    setUserLabels(
-      Object.fromEntries(
-        (labels || []).map((item: { id: string; label: string }) => [
-          item.id,
-          item.label,
-        ]),
-      ),
-    );
+    setUserLabels((current) => ({ ...current, ...Object.fromEntries((labels || []).map((item: { id: string; label: string }) => [item.id, item.label])) }));
     setNomesFuncionarios(nomesCarregados);
     setRows(loaded);
     setLoading(false);
