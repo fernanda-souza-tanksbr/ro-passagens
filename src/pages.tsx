@@ -339,8 +339,6 @@ export function Dashboard({ access }: { access: Access }) {
   const [rows, setRows] = useState<Solicitacao[]>([]);
   const [custosMensais, setCustosMensais] = useState<DashboardMonthlyCost[]>([]);
   const [nomesFuncionarios, setNomesFuncionarios] = useState<Record<string, string>>({});
-  const [operadoresRo, setOperadoresRo] = useState<Array<{ user_id: string; ativo: boolean }>>([]);
-  const [operadoresRo, setOperadoresRo] = useState<Array<{ user_id: string; ativo: boolean }>>([]);
   const [mesReferencia, setMesReferencia] = useState(
     () =>
       `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`,
@@ -759,6 +757,7 @@ export function Solicitacoes({
   const [rows, setRows] = useState<Solicitacao[]>([]);
   const [userLabels, setUserLabels] = useState<Record<string, string>>({});
   const [nomesFuncionarios, setNomesFuncionarios] = useState<Record<string, string>>({});
+  const [operadoresRo, setOperadoresRo] = useState<Array<{ user_id: string; ativo: boolean }>>([]);
   const [loading, setLoading] = useState(true);
   const [approvalView, setApprovalView] = useState<"pending" | "history">("pending");
   const filtersChanged = useRef(false);
