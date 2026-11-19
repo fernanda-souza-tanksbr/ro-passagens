@@ -53,6 +53,7 @@ import { motivoPrefillPermitido, motivoRecusaValido, podeRecusarSolicitacao, sta
 import { operationalRejectionErrorDetails, operationalRejectionErrorMessage } from "./recusaErrorMessages";
 import { compraFolgaLiberada, dataAntecipaCiclo, estadoEfetivoFolga, folgaFuturaBloqueia, justificativaAntecipacaoValida, SEM_HISTORICO_FOLGA, type CicloFolga } from "./folgaCampoRules";
 import { motivoPossuiRetorno, normalizarCamposRetorno } from "./retornoRules";
+import { motivoAdministrativoPermitido, passageiroElegivelViagemAdministrativa } from "./viagemAdministrativaEligibility";
 import { formatCityUf, normalizeNeighborhoodForDisplay, normalizeStreetForDisplay, parseCityUf } from "./collaboratorDisplay";
 import { currentCostCenterPrefill } from "./collaboratorCostCenter";
 import { idsSolicitacoesParaResolver, mapearNomesColaboradoresSolicitacoes, resolveSolicitacaoFuncionarioNome, solicitacaoCorrespondeBuscaPessoa } from "./solicitacaoColaborador";
@@ -338,6 +339,7 @@ export function Dashboard({ access }: { access: Access }) {
   const [rows, setRows] = useState<Solicitacao[]>([]);
   const [custosMensais, setCustosMensais] = useState<DashboardMonthlyCost[]>([]);
   const [nomesFuncionarios, setNomesFuncionarios] = useState<Record<string, string>>({});
+  const [operadoresRo, setOperadoresRo] = useState<Array<{ user_id: string; ativo: boolean }>>([]);
   const [mesReferencia, setMesReferencia] = useState(
     () =>
       `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`,
@@ -815,6 +817,14 @@ export function Solicitacoes({
   }, [approvalView, approvalsOnly, mostrandoExcluidas, userId]);
   useAutoFinalization(access.canViewAll, load);
   useEffect(() => {
+    if (!access.canViewAll) return;
+    supabase.from("ro_responsaveis").select("user_id,ativo").eq("ativo", true).then(({ data }) => setOperadoresRo((data || []) as Array<{ user_id: string; ativo: boolean }>));
+  }, [access.canViewAll]);
+  useEffect(() => {
+    if (!operadoresRo.length) return;
+    supabase.rpc("ro_user_labels", { p_user_ids: operadoresRo.map((x) => x.user_id) }).then(({ data }) => setUserLabels((current) => ({ ...current, ...Object.fromEntries((data || []).map((item: { id: string; label: string }) => [item.id, item.label])) })));
+  }, [operadoresRo]);
+  useEffect(() => {
     load();
   }, [load]);
   useEffect(() => {
@@ -852,6 +862,7 @@ export function Solicitacoes({
       (!filters.motivo || r.motivo === filters.motivo) &&
       matchesApprovalFilter(r.aprovacao_status, filters.aprovacao) &&
       (!filters.obra || r.obra_id === filters.obra) &&
+      (!access.canViewAll || !filters.responsavelRo || (filters.responsavelRo === "minhas" ? responsavelId(r) === userId : filters.responsavelRo === "sem_responsavel" ? !responsavelId(r) : responsavelId(r) === filters.responsavelRo)) &&
       (!filters.busca ||
         solicitacaoCorrespondeBuscaPessoa(r, filters.busca, nomesFuncionarios[r.id]) ||
         centroCustoMatches(r.obra || { nome: "" }, filters.busca) ||
@@ -934,6 +945,12 @@ export function Solicitacoes({
           <option value="aprovada">Aprovadas</option>
           <option value="reprovada">Reprovadas</option>
           <option value="dispensada">Dispensadas</option>
+        </select>}
+        {access.canViewAll && !approvalsOnly && <select aria-label="Responsável RO" value={filters.responsavelRo} onChange={(e) => updateFilters({ ...filters, responsavelRo: e.target.value })}>
+          <option value="">Todos os responsáveis</option>
+          <option value="minhas">Minhas solicitações</option>
+          <option value="sem_responsavel">Sem responsável</option>
+          {operadoresRo.map((operador) => <option key={operador.user_id} value={operador.user_id}>{userLabels[operador.user_id] || "Responsável RO"}</option>)}
         </select>}
         <select
           value={filters.obra}
@@ -1236,11 +1253,12 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
       viajante_nome_informado: "",
       funcionario_id: id,
       obra_id: currentCostCenterPrefill(f),
-      motivo: motivoAoSelecionarFuncionario(f, form.motivo),
+      motivo: motivoAdministrativoPermitido(form.motivo, f) ? motivoAoSelecionarFuncionario(f, form.motivo) : "",
       pix_viajante: "",
     });
   }
   function pickMotivo(motivo: Motivo | "") {
+    if (!motivoAdministrativoPermitido(motivo, funcionarioSelecionado)) return;
     restoredDraftRef.current = false;
     const temRetorno = motivoPossuiRetorno(motivo);
     setForm(normalizarCamposRetorno({
@@ -1309,6 +1327,7 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
       setErro("Selecione o motivo da solicitação.");
       return;
     }
+    if (!motivoAdministrativoPermitido(form.motivo, funcionarioSelecionado) || (form.motivo === "viagem_administrativa" && form.viajante_modo === "manual")) { setErro("Viagem Administrativa é exclusiva de passageiros restritos ou administrativos."); return; }
     if (form.motivo === "afastamento" && !form.observacoes_solicitante.trim()) {
       setErro("Informe a justificativa do afastamento.");
       return;
@@ -1446,7 +1465,7 @@ export function NovaSolicitacao({ userId, access }: { userId: string; access: Ac
           >
             <option value="">Selecione</option>
             {Object.entries(motivoLabel)
-              .filter(([v]) => motivosPermitidos(access.role, access.isRh).includes(v as Motivo))
+              .filter(([v]) => motivosPermitidos(access.role, access.isRh).includes(v as Motivo) && (v !== "viagem_administrativa" || passageiroElegivelViagemAdministrativa(funcionarioSelecionado)))
               .map(([v, l]) => (
                 <option value={v} key={v}>
                   {l}
