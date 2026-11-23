@@ -23,3 +23,15 @@ export function resumoStatusSolicitacao(selecionados: readonly SolicitacaoStatus
   if (selecionados.length === 1) return solicitacaoStatusOptions.find(({ value }) => value === selecionados[0])?.label || "1 status";
   return `${selecionados.length} status`;
 }
+
+export function responsavelRoCorrespondeFiltro(
+  responsavelRoId: string | null | undefined,
+  filtro: string,
+  usuarioId: string,
+  podeVerTodos: boolean,
+): boolean {
+  if (!podeVerTodos || !filtro) return true;
+  if (filtro === "minhas") return responsavelRoId === usuarioId;
+  if (filtro === "sem_responsavel") return !responsavelRoId;
+  return responsavelRoId === filtro;
+}
