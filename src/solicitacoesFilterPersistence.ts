@@ -8,6 +8,7 @@ export type SolicitacoesFilters = {
   motivo: Motivo | "";
   aprovacao: ApprovalFilter;
   obra: string;
+  responsavelRo: string;
 };
 
 type FilterStorage = Pick<Storage, "getItem" | "setItem">;
@@ -22,7 +23,7 @@ const validMotivos = new Set<string>([
 const validApprovals = new Set<string>(["", "pendente", "aprovada", "reprovada", "dispensada"]);
 
 export function defaultSolicitacoesFilters(): SolicitacoesFilters {
-  return { busca: "", status: todosStatusSolicitacao.slice(), motivo: "", aprovacao: "", obra: "" };
+  return { busca: "", status: todosStatusSolicitacao.slice(), motivo: "", aprovacao: "", obra: "", responsavelRo: "" };
 }
 
 export function solicitacoesFiltersKey(userId: string) {
@@ -51,6 +52,7 @@ export function normalizeSolicitacoesFilters(value: unknown, validObraIds?: Read
     motivo,
     aprovacao,
     obra,
+    responsavelRo: typeof candidate.responsavelRo === "string" && (candidate.responsavelRo === "" || candidate.responsavelRo === "minhas" || candidate.responsavelRo === "sem_responsavel" || /^[0-9a-f-]{36}$/i.test(candidate.responsavelRo)) ? candidate.responsavelRo : "",
   };
 }
 
