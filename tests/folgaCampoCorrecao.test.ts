@@ -13,10 +13,10 @@ test("recusa valor igual, fracionário, texto, negativo, inseguro ou justificati
   }
   assert.throws(() => validarCorrecaoDistancia("1400", "curta", 6));
 });
-test("somente RO, coordenador e gerente visualizam painel", () => {
+test("RO, coordenador, gerente e diretor visualizam painel", () => {
   assert.equal(podeExibirCorrecaoDistancia({ isRO: true, role: null }), true);
   assert.equal(podeExibirCorrecaoDistancia({ isRO: false, role: "coordenador" }), true);
   assert.equal(podeExibirCorrecaoDistancia({ isRO: false, role: "gerente" }), true);
-  assert.equal(podeExibirCorrecaoDistancia({ isRO: false, role: "diretor" }), false);
+  assert.equal(podeExibirCorrecaoDistancia({ isRO: false, role: "diretor" }), true);
   assert.equal(podeExibirCorrecaoDistancia({ isRO: false, role: null }), false);
 });
