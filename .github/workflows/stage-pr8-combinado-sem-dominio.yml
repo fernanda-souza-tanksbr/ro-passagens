@@ -1,0 +1,157 @@
+name: Stage PR8 combined RO release without production domains
+on:
+  push:
+    branches:
+      - ci/stage-pr8-combinado-20261123
+    paths:
+      - .github/workflows/stage-pr8-combinado-sem-dominio.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: stage-pr8-combinado-20261123
+  cancel-in-progress: false
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      APPROVED_SHA: ae00d96747590e0844c10c000bb3c6abf244b0f4
+      VERCEL_ORG_ID: team_SqKFvMyAmjRyfIDwxZqJMJj3
+      VERCEL_PROJECT_ID: prj_wkU8FwnRO2QqWzHfygeXUC289Jgs
+      VERCEL_TELEMETRY_DISABLED: '1'
+      VERCEL_CLI_VERSION: '65.8.0'
+    steps:
+      - name: Require approved branch and credentials without printing secrets
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          APPROVED_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY_C2 }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/ci/stage-pr8-combinado-20261123'
+          test -n "${VERCEL_TOKEN:-}"
+          test -n "${APPROVED_PUBLISHABLE_KEY:-}"
+          test "$VERCEL_ORG_ID" = 'team_SqKFvMyAmjRyfIDwxZqJMJj3'
+          test "$VERCEL_PROJECT_ID" = 'prj_wkU8FwnRO2QqWzHfygeXUC289Jgs'
+      - name: Checkout immutable, tested frontend source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ae00d96747590e0844c10c000bb3c6abf244b0f4
+          persist-credentials: false
+      - name: Verify source SHA
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$APPROVED_SHA"
+          test -z "$(git status --porcelain)"
+      - name: Configure Node 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Verify frontend source and install pinned tooling
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run typecheck
+          npm test
+          npm install --global "vercel@$VERCEL_CLI_VERSION"
+          test "$(vercel --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)" = "$VERCEL_CLI_VERSION"
+          npm install --prefix /tmp/folga-dotenv --ignore-scripts --no-audit --no-fund --silent dotenv@16.4.5
+      - name: Link expected Tanks project and pull production build configuration
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p .vercel
+          printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
+          vercel pull --yes --environment=production --scope tanks
+          test -f .vercel/.env.production.local
+      - name: Prepare DISTANCIA manifest and safe build variables
+        env:
+          APPROVED_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY_C2 }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import dotenv from '/tmp/folga-dotenv/node_modules/dotenv/lib/main.js';
+          const project=JSON.parse(fs.readFileSync('.vercel/project.json','utf8'));
+          if(project.orgId!==process.env.VERCEL_ORG_ID || project.projectId!==process.env.VERCEL_PROJECT_ID) throw Error('Wrong Vercel project');
+          const envPath='.vercel/.env.production.local';
+          const values=dotenv.parse(fs.readFileSync(envPath));
+          const key=process.env.APPROVED_PUBLISHABLE_KEY || '';
+          if (!/^sb_publishable_[A-Za-z0-9_-]+$/.test(key)) throw Error('Approved public Supabase key missing or invalid');
+          if(Object.keys(values).some(k=>/^VITE_/.test(k)&&/(SERVICE_ROLE|JWT_SECRET|PRIVATE|SECRET)/i.test(k))) throw Error('Unsafe public environment variable');
+          values.VITE_SUPABASE_URL='https://hukhwirdrpylxpaedjbc.supabase.co';
+          values.VITE_SUPABASE_PROJECT_ID='hukhwirdrpylxpaedjbc';
+          values.VITE_SUPABASE_PUBLISHABLE_KEY=key;
+          values.VITE_FOLGA_CAMPO_KM_ENABLED='C2_PRODUCAO_APROVADA';
+          fs.writeFileSync(envPath,Object.entries(values).map(([k,v])=>k+'='+JSON.stringify(v)).join('\n')+'\n',{mode:0o600});
+          fs.writeFileSync('public/folga-campo-release.json',JSON.stringify({modo:'distancia',versao_minima:2})+'\n');
+          console.log('DISTANCIA manifest and approved production public config prepared (secret values redacted).');
+          NODE
+      - name: Build production-targeted immutable artifact
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VITE_SUPABASE_URL: https://hukhwirdrpylxpaedjbc.supabase.co
+          VITE_SUPABASE_PROJECT_ID: hukhwirdrpylxpaedjbc
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY_C2 }}
+          VITE_FOLGA_CAMPO_KM_ENABLED: C2_PRODUCAO_APROVADA
+        run: |
+          set -euo pipefail
+          vercel build --prod --scope tanks
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const root='.vercel/output/static';
+          const manifest=JSON.parse(fs.readFileSync(path.join(root,'folga-campo-release.json'),'utf8'));
+          if(manifest.modo!=='distancia'||manifest.versao_minima!==2) throw Error('Wrong staged release manifest');
+          const assets=fs.readdirSync(path.join(root,'assets')).filter(x=>x.endsWith('.js'));
+          const js=assets.map(x=>fs.readFileSync(path.join(root,'assets',x),'utf8')).join('\n');
+          const url=process.env.VITE_SUPABASE_URL;
+          const key=process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+          if(!key || !js.includes(url) || !js.includes(key) || js.includes('https://placeholder.supabase.co')) throw Error('Compiled public configuration mismatch');
+          if(!js.includes('ro_criar_folga_campo_com_distancia') || !js.includes('ro_consultar_contexto_distancia_folga') || !js.includes('ro_corrigir_distancia_folga') || !js.includes('ro_listar_responsaveis_filtro')) throw Error('Required PR8 RPC not present in compiled JS');
+          console.log('Production-targeted artifact validated: DISTANCIA, correct Supabase project and RPCs; values redacted.');
+          NODE
+      - name: Stage deployment without domains or promotion
+        id: deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          url="$(vercel deploy --prebuilt --prod --skip-domain --scope tanks --meta approvedCommit="$APPROVED_SHA")"
+          DEPLOYMENT_URL="$url" node --input-type=module -e 'const u=new URL(process.env.DEPLOYMENT_URL);if(u.protocol!=="https:"||u.origin!==process.env.DEPLOYMENT_URL||!u.hostname.endsWith(".vercel.app"))process.exit(1)'
+          printf 'url=%s\n' "$url" >> "$GITHUB_OUTPUT"
+      - name: Confirm READY and no operational aliases
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          set -euo pipefail
+          hostname="${DEPLOYMENT_URL#https://}"
+          response=""
+          state=""
+          for attempt in $(seq 1 20); do
+            response="$(curl --fail --silent --show-error -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com/v13/deployments/$hostname?teamId=$VERCEL_ORG_ID")"
+            state="$(jq -r '.readyState // .state // empty' <<< "$response")"
+            if [ "$state" = READY ]; then break; fi
+            if [ "$state" = ERROR ] || [ "$state" = CANCELED ]; then echo "::error::Unexpected deployment state $state"; exit 1; fi
+            sleep 10
+          done
+          test "$state" = READY
+          deployment_id="$(jq -r '.id' <<< "$response")"
+          test "$(jq -r '.meta.approvedCommit // empty' <<< "$response")" = "$APPROVED_SHA"
+          aliases="$(curl --fail --silent --show-error -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com/v2/deployments/$deployment_id/aliases?teamId=$VERCEL_ORG_ID")"
+          if jq -e '[.aliases[]?.alias] | any(. == "ro-passagens.vercel.app" or . == "portal-tks-br.vercel.app" or . == "portal-tks-br-tanks.vercel.app" or . == "portal-tks-br-git-main-tanks.vercel.app")' <<< "$aliases" | grep -q true; then
+            echo "::error::Unexpected operational alias on staged build"; exit 1
+          fi
+          {
+            echo '## PR8 (retorno administrativo, restricao, filtro RO, KM) — staged DISTANCIA (NOT PROMOTED)'
+            echo "- URL: $DEPLOYMENT_URL"
+            echo "- Deployment ID: $deployment_id"
+            echo "- Source SHA: $APPROVED_SHA"
+            echo '- Status: READY, production-targeted build, skip-domain'
+            echo '- Operational domains: none assigned'
+            echo '- Promotion: NOT EXECUTED'
+            echo '- Supabase SQL/flags: NOT CHANGED'
+          } >> "$GITHUB_STEP_SUMMARY"
