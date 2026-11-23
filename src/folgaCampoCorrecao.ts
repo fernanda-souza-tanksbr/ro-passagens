@@ -17,5 +17,5 @@ export function validarCorrecaoDistancia(
   return { km, justificativa: motivo };
 }
 export function podeExibirCorrecaoDistancia(access: { isRO: boolean; role: string | null }): boolean {
-  return access.isRO || access.role === "coordenador" || access.role === "gerente";
+  return access.isRO || access.role === "coordenador" || access.role === "gerente" || access.role === "diretor";
 }
