@@ -1,0 +1,47 @@
+name: Validar acesso da Diretoria à correção de KM (sem publicação)
+on:
+  push:
+    branches:
+      - fix/folga-km-diretoria-20261123
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Validar SQL da Diretoria sem executar no banco
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const apply=fs.readFileSync('supabase/manual/20261123_autorizar_diretoria_correcao_km_NAO_APLICAR.sql','utf8');
+          const rollback=fs.readFileSync('supabase/manual/20261123_autorizar_diretoria_correcao_km_ROLLBACK.sql','utf8');
+          for(const [label,sql] of [['apply',apply],['rollback',rollback]]) {
+            if(!sql.includes('BEGIN;')||!sql.includes('COMMIT;')||
+               !sql.includes('CREATE OR REPLACE FUNCTION ro_private.pode_corrigir_distancia_folga') ||
+               !sql.includes('SECURITY DEFINER') ||
+               !sql.includes('REVOKE ALL ON FUNCTION ro_private.pode_corrigir_distancia_folga') ||
+               !sql.includes('auth.users') || !sql.includes('public.user_roles') ||
+               !sql.includes('public.ro_is_operador_ativo(p_user)')) {
+              throw new Error(label+': structural guard missing');
+            }
+          }
+          if(!apply.includes("'coordenador', 'gerente', 'diretor'")||
+             !rollback.includes("'coordenador', 'gerente'")||
+             rollback.includes("'coordenador', 'gerente', 'diretor'")) {
+            throw new Error('Unexpected backend role set');
+          }
+          console.log('Director KM SQL structure checked; NO SQL executed');
+          NODE
