@@ -7,11 +7,13 @@ import type { Funcionario } from "../src/types.ts";
 const interno = { id: "privado-1", funcionario_id: null, nome: "Colaborador administrativo", visivel_obras_control: false, visivel_passagens: true, escopo_passagens: "restrito_ro" } satisfies Funcionario;
 const obras = { id: "operacional-1", funcionario_id: "operacional-1", nome: "Técnico de segurança", visivel_obras_control: true, visivel_passagens: true, escopo_passagens: "comum" } satisfies Funcionario;
 
-test("somente cadastro privado RO sem vínculo operacional pode ser selecionado", () => {
+test("cadastro privado ou funcionário restrito RO não operacional pode ser selecionado", () => {
   assert.equal(passageiroElegivelViagemAdministrativa(interno), true);
   assert.equal(passageiroElegivelViagemAdministrativa({ ...interno, visivel_passagens: undefined, escopo_passagens: undefined }), true, "a origem privada prevalece sobre flags auxiliares");
   assert.equal(passageiroElegivelViagemAdministrativa(obras), false);
-  assert.equal(passageiroElegivelViagemAdministrativa({ ...obras, visivel_obras_control: false, escopo_passagens: "restrito_ro" }), false, "registro em funcionarios continua não elegível");
+  assert.equal(passageiroElegivelViagemAdministrativa({ ...obras, visivel_obras_control: false, escopo_passagens: "restrito_ro" }), true, "funcionário restrito RO não operacional passa a ser elegível");
+  assert.equal(passageiroElegivelViagemAdministrativa({ ...obras, visivel_obras_control: false, escopo_passagens: "comum" }), false, "funcionário comum continua bloqueado");
+  assert.equal(passageiroElegivelViagemAdministrativa({ ...obras, visivel_obras_control: false, visivel_passagens: false, escopo_passagens: "restrito_ro" }), false, "funcionário indisponível em passagens continua bloqueado");
   assert.equal(passageiroElegivelViagemAdministrativa({ ...interno, funcionario_id: "operacional-1", visivel_obras_control: true }), false);
   assert.equal(passageiroElegivelViagemAdministrativa({ ...interno, funcionario_id: "restrito-1", visivel_obras_control: false }), true);
   assert.equal(passageiroElegivelViagemAdministrativa(null), false);
